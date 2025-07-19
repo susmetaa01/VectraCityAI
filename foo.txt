@@ -1,2 +1,6 @@
-    hello world, after all!
-    testing from develop, hehehe
+To Run locally
+```
+source VectraCityAIEnv/bin/activate
+ngrok http 5000
+python app/whatsapp_bot_twilio.py
+```
