@@ -10,7 +10,6 @@ from google.cloud import pubsub_v1
 from google.cloud import storage
 from google.cloud import firestore
 
-# --- Configuration ---
 app = Flask(__name__)
 
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID', 'AC95b60f8ee2f0ed253bd27cd4a50d9dfa')
