@@ -8,6 +8,12 @@ import os
 from . import config
 from . import io_connectors
 from . import transform
+from . import parse
+from . import analyze
+
+from .parse import raw_data_parser # For ParseTweetFn
+from .parse import data_normaliser  # For ComprehendFn
+from .analyze import ai_analyzer
 
 def run_pipeline():
     """
@@ -26,57 +32,63 @@ def run_pipeline():
     pipeline_options.view_as(StandardOptions).streaming = True # Essential for Pub/Sub sources
 
     with beam.Pipeline(options=pipeline_options) as pipeline:
-        # --- Branch 1: WhatsApp Trigger Events ---
-        # This branch reads signals that a WhatsApp event has been fully processed and stored (with location)
-        whatsapp_trigger_events_pcoll = (
+        # --- Branch 1: Full WhatsApp Event Payloads ---
+        whatsapp_pipeline = (
                 pipeline
-                | 'ReadWhatsAppTriggerEvents' >> io_connectors.ReadTriggerEvents() # Uses PTransform from io_connectors.py
-                | 'PrintWhatsAppTriggerPayload' >> beam.Map(lambda x: print(f"WhatsApp Trigger Event: {x}")) # For debugging/logging
+                | 'ReadFullWhatsAppEvents' >> beam.io.ReadFromPubSub(
+            subscription=f"projects/{config.GCP_PROJECT_ID}/subscriptions/{config.PUBSUB_TOPIC_ID_INCOMING}-sub"
+        )
+                | 'DecodeAndParseFullWhatsAppJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8')))
+                # | 'PrintRawWhatsAppFullEvent' >> beam.Map(lambda x: print(f"RAW WhatsApp Full Event: {x}")) # Debug raw input
+                | 'ComprehendWhatsAppEvent' >> beam.ParDo(parse.data_normaliser.ComprehendFn())
+                | 'PrintWhatsAppComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended WhatsApp Event: {x}")) # Debug normalized
+                | 'AnalyzeWhatsAppEventsWithGemini' >> beam.ParDo(ai_analyzer.AIComprehensionFn())
+                | 'PrintWhatsAppAnalyzedEvent' >> beam.Map(lambda x: print(f"Analyzed WhatsApp Event: {x}"))
         )
 
         # --- Branch 2: Raw Twitter Feed ---
-        # This branch reads raw tweets published from your external Twitter ingestion script
-        # raw_twitter_feed_pcoll = (
-        #         pipeline
-        #         | 'ReadRawTwitterFeed' >> io_connectors.ReadTwitterFeed() # Uses PTransform from io_connectors.py
-        #         | 'ParseTwitterTweetData' >> beam.ParDo(transform.twitter_feed_transformer.ParseTweetFn()) # Uses DoFn from twitter_feed_transformer.py
-        #         | 'PrintParsedTweet' >> beam.Map(lambda x: print(f"Parsed Twitter Tweet: {x}")) # For debugging/logging
-        # )
-
-        raw_google_news_feed_data = (
+        # Raw data -> Parsing -> Normalization -> AI Analysis
+        twitter_pipeline = (
                 pipeline
-                | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed() # Use PTransform
-                | 'DecodeAndParseNewsJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8'))) # News already parsed to JSON
-                | 'PrintParsedNewsArticle' >> beam.Map(lambda x: print(f"Parsed News Article: {x}")) # For debugging/logging
+                | 'ReadRawTwitterFeed' >> io_connectors.ReadTwitterFeed()
+                | 'ParseTwitterTweetData' >> beam.ParDo(raw_data_parser.ParseTweetFn())
+                # | 'PrintParsedTweet' >> beam.Map(lambda x: print(f"Parsed Twitter Tweet: {x}")) # Debug parsed
+                | 'ComprehendTwitterEvent' >> beam.ParDo(data_normaliser.ComprehendFn())
+                | 'PrintTwitterComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended Twitter Event: {x}")) # Debug normalized
+                | 'AnalyzeTwitterEventsWithGemini' >> beam.ParDo(ai_analyzer.AIComprehensionFn())
+                | 'PrintTwitterAnalyzedEvent' >> beam.Map(lambda x: print(f"Analyzed Twitter Event: {x}"))
         )
 
-        # --- Future: Unified Processing and AI Comprehension ---
-        # In a complete project, you would:
-        # 1. Read the *full* WhatsApp event payloads (not just triggers) from another Pub/Sub topic
-        #    (e.g., 'whatsapp-full-events-data-sub' which is where the Flask app publishes the enriched payload).
-        # 2. Apply AI Comprehension (Gemini NLP, Vertex AI Vision/Video) to both parsed tweets and processed WhatsApp events.
-        # 3. Geocode any implicit locations (e.g., from tweet text) using Google Maps Geocoding API.
-        # 4. Normalize schemas of both event types to a unified format.
-        # 5. Merge (Flatten) the streams from various sources.
-        # 6. Write the unified events to InfluxDB.
+        # --- Branch 3: Raw Google News Feed ---
+        # Raw data -> Decoding/Parsing -> Normalization -> AI Analysis
+        google_news_pipeline = (
+                pipeline
+                | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
+                | 'DecodeAndParseNewsJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8')))
+                # | 'PrintParsedNewsArticle' >> beam.Map(lambda x: print(f"Parsed News Article: {x}")) # Debug parsed
+                | 'ComprehendNewsArticle' >> beam.ParDo(data_normaliser.ComprehendFn())
+                | 'PrintComprehendedNewsArticle' >> beam.Map(lambda x: print(f"Comprehended News Article: {x}")) # Debug normalized
+                | 'AnalyzeNewsArticlesWithGemini' >> beam.ParDo(ai_analyzer.AIComprehensionFn())
+                | 'PrintAnalyzedNewsArticle' >> beam.Map(lambda x: print(f"Analyzed News Article: {x}"))
+        )
 
-        # Example of conceptual unified stream (requires `full_whatsapp_events_pcoll` from another Pub/Sub topic):
-        # full_whatsapp_events_pcoll = (
-        #     pipeline
-        #     | 'ReadFullWhatsAppEvents' >> beam.io.ReadFromPubSub(subscription=f"projects/{config.GCP_PROJECT_ID}/subscriptions/whatsapp-full-events-data-sub")
-        #     | 'ProcessWhatsAppEventWithAI' >> beam.ParDo(transforms.AIComprehensionFn()) # Apply AI
-        # )
+        # --- Trigger Event Listener (Separate Branch, No AI Analysis on triggers) ---
+        # This branch reads only the SIDs of WhatsApp events that have been fully processed.
+        whatsapp_trigger_listener = (
+                pipeline
+                | 'ReadWhatsAppTriggerEvents' >> io_connectors.ReadTriggerEvents()
+                | 'PrintWhatsAppTriggerPayload' >> beam.Map(lambda x: print(f"WhatsApp Trigger Event (SID only): {x}"))
+        )
 
-        # processed_tweets_pcoll = (
-        #     raw_twitter_feed_pcoll
-        #     | 'ProcessTweetWithAI' >> beam.ParDo(transforms.AIComprehensionFn()) # Apply AI to tweets
-        #     | 'GeocodeTweetLocations' >> beam.ParDo(transforms.GeocodeLocationFn()) # Geocode if needed
-        # )
+        # --- Final Sink ---
+        # The analyzed streams (whatsapp_analyzed_events, twitter_analyzed_events, news_analyzed_articles)
+        # would then be merged and written to a final sink like InfluxDB.
 
-        # unified_data_stream = (
-        #     (full_whatsapp_events_pcoll, processed_tweets_pcoll)
-        #     | 'FlattenAllProcessedEvents' >> beam.Flatten()
-        #     | 'WriteToUnifiedSink' >> io_connectors.WriteToInfluxDB()
+        # Example of conceptual unified stream:
+        # unified_analyzed_stream = (
+        #     (whatsapp_analyzed_events, twitter_analyzed_events, news_analyzed_articles)
+        #     | 'FlattenAllAnalyzedEvents' >> beam.Flatten()
+        #     # | 'WriteToUnifiedSink' >> io_connectors.WriteToInfluxDB() # Your InfluxDB PTransform
         # )
 
 
