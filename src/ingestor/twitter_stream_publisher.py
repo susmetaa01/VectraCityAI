@@ -5,11 +5,12 @@ from google.cloud import pubsub_v1 # pip install google-cloud-pubsub
 
 # --- Configuration ---
 # Twitter API Credentials (Set these as environment variables)
-BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN") # For Twitter API v2 StreamingClient
+BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN","AAAAAAAAAAAAAAAAAAAAANjK3AEAAAAAcbM1cUJO7BwCR1SubASDUYoe4gM%3DW1vPLXdAO4vBgL7jtywxWjgxiBfeU0U05LnvBTm4U5eHMh6rxB") # For Twitter API v2 StreamingClient
+
 
 # Google Cloud Pub/Sub Configuration (Set these as environment variables)
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "schrodingers-cat-466413")
-PUBSUB_TOPIC_ID_RAW_TWITTER = os.getenv("PUBSUB_TOPIC_ID_RAW_TWITTER", "raw-twitter-feed")
+PUBSUB_TOPIC_ID_RAW_TWITTER = os.getenv("PUBSUB_TOPIC_ID_RAW_TWITTER", "twitter-incoming-raw-events")
 
 # --- Pub/Sub Publisher Client ---
 publisher = pubsub_v1.PublisherClient()
@@ -20,6 +21,7 @@ class TwitterStreamListener(tweepy.StreamingClient):
     """
     Custom Tweepy StreamingClient to handle incoming tweets and publish to Pub/Sub.
     """
+
     def on_tweet(self, tweet):
         """Called when a new tweet is received."""
         print(f"Received tweet (ID: {tweet.id}): {tweet.text[:50]}...")

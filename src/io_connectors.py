@@ -27,6 +27,17 @@ class ReadTwitterFeed(beam.PTransform):
                 | 'ReadFromTwitterPubSub' >> beam.io.ReadFromPubSub(subscription=pubsub_subscription_path)
         )
 
+class ReadGoogleNewsFeed(beam.PTransform):
+    """
+    A PTransform to read raw Google News RSS feed data from the designated Pub/Sub subscription.
+    """
+    def expand(self, pcoll):
+        pubsub_subscription_path = f"projects/{config.GCP_PROJECT_ID}/subscriptions/{config.PUBSUB_SUBSCRIPTION_NAME_GNEWS}" # Assuming a sub is named 'raw-google-news-feed-sub'
+        return (
+                pcoll
+                | 'ReadFromGoogleNewsPubSub' >> beam.io.ReadFromPubSub(subscription=pubsub_subscription_path)
+        )
+
 # Future: Add other IO connectors here, e.g., WriteToInfluxDB, ReadGoogleNews
 # class WriteToInfluxDB(beam.PTransform):
 #     def expand(self, pcoll):

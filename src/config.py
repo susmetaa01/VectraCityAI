@@ -10,10 +10,11 @@ DATAFLOW_REGION = os.getenv('DATAFLOW_REGION', 'asia-south1')
 PUBSUB_SUBSCRIPTION_NAME_TRIGGER = os.getenv('PUBSUB_SUBSCRIPTION_NAME_TRIGGER', 'vectraCityAI-event-trigger-sub')
 # Subscription for raw Twitter feed data (from your Twitter ingestion script)
 PUBSUB_SUBSCRIPTION_NAME_TWITTER = os.getenv('PUBSUB_SUBSCRIPTION_NAME_TWITTER', 'twitter-incoming-raw-events-sub')
+PUBSUB_SUBSCRIPTION_NAME_GNEWS = os.getenv('PUBSUB_SUBSCRIPTION_NAME_GNEWS', 'gnews-incoming-raw-events-sub')
 
 # --- Google Cloud Storage for Dataflow staging/temp files ---
 # Ensure this bucket exists in your GCP project and is accessible by your Dataflow service account
-GCS_DATAFLOW_BUCKET = os.getenv('GCS_DATAFLOW_BUCKET', f'{GCP_PROJECT_ID}-dataflow-temp')
+GCS_DATAFLOW_BUCKET = os.getenv('GCS_DATAFLOW_BUCKET', 'vectracityai_events')
 GCS_TEMP_LOCATION = f'gs://{GCS_DATAFLOW_BUCKET}/tmp'
 GCS_STAGING_LOCATION = f'gs://{GCS_DATAFLOW_BUCKET}/staging'
 

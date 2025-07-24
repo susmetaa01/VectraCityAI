@@ -1,3 +1,5 @@
+import json
+
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, GoogleCloudOptions
 import os
@@ -16,7 +18,7 @@ def run_pipeline():
     pipeline_options = PipelineOptions()
 
     # Configure common pipeline options for Dataflow deployment
-    pipeline_options.view_as(StandardOptions).runner = 'DataflowRunner' # Use 'DirectRunner' for local testing
+    # pipeline_options.view_as(StandardOptions).runner = 'DataflowRunner' # Use 'DirectRunner' for local testing
     pipeline_options.view_as(GoogleCloudOptions).project = config.GCP_PROJECT_ID
     pipeline_options.view_as(GoogleCloudOptions).region = config.DATAFLOW_REGION
     pipeline_options.view_as(GoogleCloudOptions).temp_location = config.GCS_TEMP_LOCATION
@@ -34,11 +36,18 @@ def run_pipeline():
 
         # --- Branch 2: Raw Twitter Feed ---
         # This branch reads raw tweets published from your external Twitter ingestion script
-        raw_twitter_feed_pcoll = (
+        # raw_twitter_feed_pcoll = (
+        #         pipeline
+        #         | 'ReadRawTwitterFeed' >> io_connectors.ReadTwitterFeed() # Uses PTransform from io_connectors.py
+        #         | 'ParseTwitterTweetData' >> beam.ParDo(transform.twitter_feed_transformer.ParseTweetFn()) # Uses DoFn from twitter_feed_transformer.py
+        #         | 'PrintParsedTweet' >> beam.Map(lambda x: print(f"Parsed Twitter Tweet: {x}")) # For debugging/logging
+        # )
+
+        raw_google_news_feed_data = (
                 pipeline
-                | 'ReadRawTwitterFeed' >> io_connectors.ReadTwitterFeed() # Uses PTransform from io_connectors.py
-                | 'ParseTwitterTweetData' >> beam.ParDo(transform.twitter_feed_transformer.ParseTweetFn()) # Uses DoFn from twitter_feed_transformer.py
-                | 'PrintParsedTweet' >> beam.Map(lambda x: print(f"Parsed Twitter Tweet: {x}")) # For debugging/logging
+                | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed() # Use PTransform
+                | 'DecodeAndParseNewsJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8'))) # News already parsed to JSON
+                | 'PrintParsedNewsArticle' >> beam.Map(lambda x: print(f"Parsed News Article: {x}")) # For debugging/logging
         )
 
         # --- Future: Unified Processing and AI Comprehension ---
@@ -80,8 +89,7 @@ if __name__ == '__main__':
     # export PUBSUB_SUBSCRIPTION_NAME_TWITTER='raw-twitter-feed-sub' # Create this topic/subscription!
     # export GCS_DATAFLOW_BUCKET='schrodingers-cat-466413-dataflow-temp' # Ensure this GCS bucket exists!
 
-    print("Starting Apache Beam pipeline to listen for WhatsApp triggers and raw Twitter events...")
-    print("Ensure all required Pub/Sub subscriptions and GCS buckets exist and have appropriate permissions.")
+    print("Starting Apache Beam pipeline")
 
     # --- How to Run ---
     # 1. Local (for testing, uses DirectRunner):
