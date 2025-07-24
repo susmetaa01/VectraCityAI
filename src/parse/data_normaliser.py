@@ -2,8 +2,13 @@
 import apache_beam as beam
 import json
 import logging
+import uuid # <-- NEW: For generating UUIDs if needed for event_id
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
+# Relative imports from your project structure
+from ..model.incoming_events import AnalyzeInput, Geolocation, DataInput # <-- UPDATED: Import AnalyzeInput, DataInput
+from ..utils.geocoding_utils import reverse_geocode, GeocodingError # <-- NEW: For reverse geocoding
 
 logger = logging.getLogger('beam_data_normalizer')
 if not logger.handlers:
@@ -12,74 +17,125 @@ if not logger.handlers:
 
 def _normalize_event_fields(event_data: Dict[str, Any], source_type: str) -> Dict[str, Any]:
     """
-    Normalizes event data from different sources into a common, consistent format.
-    This is a template; you'll expand this with specific logic for each source type.
+    Normalizes event data from different sources into a common format
+    that directly maps to the AnalyzeInput schema for AI comprehension.
     """
-    logger.info(f"--- Normalizing Event from {source_type} ---")
+    logger.info(f"--- Starting Normalization from {source_type} ---")
     logger.info(f"Raw incoming event data for normalization: {json.dumps(event_data, indent=2)}")
-    logger.info("---------------------------------------------")
 
-    normalized_event = {
-        "event_id": event_data.get('message_sid') or event_data.get('tweet_id') or event_data.get('article_id') or str(uuid.uuid4()), # Unique ID
-        "source": source_type,
-        "raw_data_original": event_data, # Keep original raw data for auditing/debugging
+    # Initialize fields for AnalyzeInput
+    information_text: Optional[str] = None
+    media_gcs_uri: Optional[str] = None
+    media_content_type: Optional[str] = None
+    event_timestamp_str: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address_info: Optional[str] = None
+    optional_info_parts: List[str] = [] # Collect various extra details here
 
-        "text_content": None,
-        "timestamp_utc": None,
-        "latitude": None,
-        "longitude": None,
-        "address_info": None, # Could be string or dict
-        "media_gcs_uri": None,
-        "media_content_type": None,
-        "keywords": [], # Normalized keywords/hashtags
-        "sentiment": None, # Pre-fill, will be populated by AI later
-        "error_flags": [] # To flag issues during processing
-    }
-
-    # --- Source-Specific Normalization Logic ---
+    # --- Source-Specific Extraction Logic ---
 
     if source_type == "whatsapp":
-        normalized_event["text_content"] = event_data.get('text_body')
-        normalized_event["timestamp_utc"] = event_data.get('timestamp')
-        normalized_event["latitude"] = float(event_data['latitude']) if event_data.get('latitude') is not None else None
-        normalized_event["longitude"] = float(event_data['longitude']) if event_data.get('longitude') is not None else None
-        normalized_event["address_info"] = event_data.get('address') or event_data.get('label')
-        normalized_event["media_gcs_uri"] = event_data.get('media_gcs_uri')
-        normalized_event["media_content_type"] = event_data.get('media_content_type')
-        normalized_event["keywords"] = [k.lower() for k in normalized_event["text_content"].split() if len(k) > 2] # Simple text split for keywords
+        information_text = event_data.get('text_body')
+        event_timestamp_str = event_data.get('timestamp')
+        latitude = float(event_data['latitude']) if event_data.get('latitude') is not None else None
+        longitude = float(event_data['longitude']) if event_data.get('longitude') is not None else None
+        address_info = event_data.get('address') or event_data.get('label')
+        media_gcs_uri = event_data.get('media_gcs_uri')
+        media_content_type = event_data.get('media_content_type')
+        if event_data.get('location_resolved'): optional_info_parts.append("Location was user-provided.")
+        # Add other WhatsApp-specific fields to optional_info_parts if relevant
 
     elif source_type == "twitter":
-        normalized_event["text_content"] = event_data.get('text')
-        normalized_event["timestamp_utc"] = event_data.get('created_at') # Needs parsing from Twitter's format
-        normalized_event["latitude"] = float(event_data['geo_coordinates_lat']) if event_data.get('geo_coordinates_lat') is not None else None
-        normalized_event["longitude"] = float(event_data['geo_coordinates_lon']) if event_data.get('geo_coordinates_lon') is not None else None
-        normalized_event["address_info"] = event_data.get('place_name')
-        normalized_event["keywords"] = [h.lower() for h in event_data.get('hashtags', [])]
-        # Twitter media would typically be part of text or attached URLs that need separate fetching/processing if desired beyond GCS
+        information_text = event_data.get('text')
+        event_timestamp_str = event_data.get('created_at') # Needs robust parsing
+        latitude = float(event_data['geo_coordinates_lat']) if event_data.get('geo_coordinates_lat') is not None else None
+        longitude = float(event_data['geo_coordinates_lon']) if event_data.get('geo_coordinates_lon') is not None else None
+        address_info = event_data.get('place_name')
+        optional_info_parts.append(f"Tweet ID: {event_data.get('tweet_id')}, User: @{event_data.get('user_screen_name')}")
+        if event_data.get('hashtags'): optional_info_parts.append(f"Hashtags: {', '.join(event_data['hashtags'])}")
+        # Twitter media typically handled separately or linked via URLs in text, not direct GCS upload from bot
 
     elif source_type == "googlenews":
-        normalized_event["text_content"] = event_data.get('summary') or event_data.get('title')
-        normalized_event["timestamp_utc"] = event_data.get('published_date') # Needs parsing
-        normalized_event["address_info"] = None # Will need Geocoding based on text content later
-        normalized_event["keywords"] = [k.lower() for k in normalized_event["text_content"].split() if len(k) > 2] # Simple text split for keywords
+        information_text = event_data.get('summary') or event_data.get('title')
+        event_timestamp_str = event_data.get('published_date') # Needs robust parsing
+        address_info = event_data.get('address_info') # Might already be populated if geocoded by ingestor
+        optional_info_parts.append(f"Source: Google News, Article ID: {event_data.get('article_id')}, Link: {event_data.get('link')}")
+        # News articles typically don't have media for direct AI comprehension unless explicitly extracted
 
-    # --- Common Post-Normalization Steps ---
-    # Standardize timestamp to ISO format if possible
-    if normalized_event["timestamp_utc"]:
+    # --- Standardize Timestamp ---
+    if event_timestamp_str:
         try:
             import dateutil.parser # This library is very robust for parsing various date strings
-            normalized_event["timestamp_utc"] = dateutil.parser.parse(normalized_event["timestamp_utc"]).isoformat()
+            event_timestamp_str = dateutil.parser.parse(event_timestamp_str).isoformat()
         except Exception:
-            normalized_event["error_flags"].append("timestamp_parse_error")
-            normalized_event["timestamp_utc"] = datetime.utcnow().isoformat() # Fallback to current UTC time
+            logger.warning(f"Could not parse timestamp '{event_timestamp_str}' for event. Falling back to now.")
+            event_timestamp_str = datetime.utcnow().isoformat() # Fallback
 
-    return normalized_event
+    # --- Reverse Geocoding (if lat/lon are present but no full address) ---
+    # This ensures comprehensive location info for AI and maps, if not already provided
+    if latitude is not None and longitude is not None:
+        try:
+            geo_details = reverse_geocode(latitude, longitude)
+            if geo_details:
+                # Prioritize existing address if explicit, otherwise use geocoded
+                address_info = address_info or geo_details.get("formatted_address")
+                # Populate area/sublocation from geocoding
+                geo_area = geo_details.get("area")
+                geo_sublocation = geo_details.get("sublocation")
+            else:
+                geo_area, geo_sublocation = None, None
+        except GeocodingError as e:
+            logger.error(f"Reverse geocoding failed for ({latitude}, {longitude}): {e}")
+            geo_area, geo_sublocation = None, None
+            optional_info_parts.append(f"Geocoding Error: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error during reverse geocoding for ({latitude}, {longitude}): {e}")
+            geo_area, geo_sublocation = None, None
+            optional_info_parts.append(f"Unexpected Geocoding Error: {e}")
+    else:
+        geo_area, geo_sublocation = None, None # No lat/lon, no geocoding
+
+    # --- Construct Geolocation Pydantic Model ---
+    geolocation_obj = Geolocation(
+        latitude=latitude,
+        longitude=longitude,
+        address=address_info,
+        area=geo_area,
+        sublocation=geo_sublocation
+    )
+
+    # --- Construct DataInput Pydantic Model (if media exists) ---
+    data_input_obj: Optional[DataInput] = None
+    if media_gcs_uri and media_content_type:
+        try:
+            data_input_obj = DataInput(url=media_gcs_uri, mimeType=media_content_type)
+        except Exception as e:
+            logger.error(f"Error creating DataInput for media URI {media_gcs_uri}: {e}")
+            optional_info_parts.append(f"Media Input Error: {e}")
+
+
+    # --- Construct the final AnalyzeInput compatible dictionary ---
+    # This dictionary will be passed to AIComprehensionFn
+    analyze_input_payload = {
+        "data": data_input_obj.model_dump() if data_input_obj else None, # Use model_dump() for dict representation
+        "information": information_text,
+        "geolocation": geolocation_obj.model_dump(), # Use model_dump() for dict representation
+        "timestamp": event_timestamp_str,
+        "optional_information": "\n".join(optional_info_parts) if optional_info_parts else None
+    }
+
+    logger.info(f"--- Finished Normalization for {source_type} ---")
+    logger.info(f"Normalized AnalyzeInput Payload: {json.dumps(analyze_input_payload, indent=2)}")
+    logger.info("---------------------------------------------")
+
+    return analyze_input_payload
 
 
 class ComprehendFn(beam.DoFn):
     """
-    A Beam DoFn that applies the comprehend_event logic to incoming data,
-    normalizing it into a common schema.
+    A Beam DoFn that applies the _normalize_event_fields logic to incoming data,
+    normalizing it into a common schema (AnalyzeInput compatible dictionary).
     """
     def process(self, element: Dict[str, Any]):
         # Element should already be a parsed dictionary from its source.

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from gemini_client import analyze_with_gemini
-from models import AnalysisResponse, InfoInput, AnalyzeInput
+from .model import AnalysisResponse, InfoInput, AnalyzeInput
 
 app = FastAPI()
 

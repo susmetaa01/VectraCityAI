@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from models import Geolocation, AnalysisResponse, DataInput
+
+from model.incoming_events import Geolocation, AnalysisResponse, DataInput
 
 load_dotenv()
 
