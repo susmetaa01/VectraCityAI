@@ -5,7 +5,7 @@ import os
 # Relative imports from your newly created 'src' package
 from . import config
 from . import io_connectors
-from . import transforms
+from . import transform
 
 def run_pipeline():
     """
@@ -37,7 +37,7 @@ def run_pipeline():
         raw_twitter_feed_pcoll = (
                 pipeline
                 | 'ReadRawTwitterFeed' >> io_connectors.ReadTwitterFeed() # Uses PTransform from io_connectors.py
-                | 'ParseTwitterTweetData' >> beam.ParDo(transforms.ParseTweetFn()) # Uses DoFn from transforms.py
+                | 'ParseTwitterTweetData' >> beam.ParDo(transform.twitter_feed_transformer.ParseTweetFn()) # Uses DoFn from twitter_feed_transformer.py
                 | 'PrintParsedTweet' >> beam.Map(lambda x: print(f"Parsed Twitter Tweet: {x}")) # For debugging/logging
         )
 

@@ -59,7 +59,7 @@ class ParseTweetFn(beam.DoFn):
                 if place_info.get('bounding_box') and place_info['bounding_box'].get('coordinates'):
                     parsed_tweet['bbox_coordinates'] = place_info['bounding_box']['coordinates']
 
-            yield parsed_tweet # Yield the neatly parsed dictionary
+            yield parsed_tweet
 
         except json.JSONDecodeError as e:
             print(f"Error decoding JSON from Pub/Sub (Twitter feed): {e} - Element: {element.decode('utf-8', errors='ignore')}")

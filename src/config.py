@@ -9,7 +9,7 @@ DATAFLOW_REGION = os.getenv('DATAFLOW_REGION', 'asia-south1')
 # Subscription for WhatsApp trigger events (from your Flask app)
 PUBSUB_SUBSCRIPTION_NAME_TRIGGER = os.getenv('PUBSUB_SUBSCRIPTION_NAME_TRIGGER', 'vectraCityAI-event-trigger-sub')
 # Subscription for raw Twitter feed data (from your Twitter ingestion script)
-PUBSUB_SUBSCRIPTION_NAME_TWITTER = os.getenv('PUBSUB_SUBSCRIPTION_NAME_TWITTER', 'raw-twitter-feed-sub')
+PUBSUB_SUBSCRIPTION_NAME_TWITTER = os.getenv('PUBSUB_SUBSCRIPTION_NAME_TWITTER', 'twitter-incoming-raw-events-sub')
 
 # --- Google Cloud Storage for Dataflow staging/temp files ---
 # Ensure this bucket exists in your GCP project and is accessible by your Dataflow service account
