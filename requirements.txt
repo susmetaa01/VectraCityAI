@@ -1,0 +1,36 @@
+# Core Flask App & Twilio
+Flask
+requests
+twilio
+
+# Google Cloud Libraries
+google-cloud-pubsub
+google-cloud-storage
+google-cloud-firestore
+
+# Apache Beam with GCP dependencies
+# This includes many underlying Google Cloud client libraries like google-api-core, apitools, etc.
+apache-beam[gcp]
+
+# Ingestor Libraries
+tweepy                     # For Twitter API
+feedparser                 # For RSS feed parsing
+
+# Environment Variable Management (Recommended for local dev)
+python-dotenv
+
+# For robust date/time parsing (e.g., Twilio timestamps, RSS article dates)
+python-dateutil
+
+#For Gemini model
+fastapi
+uvicorn
+pydantic
+httpx
+googlemaps
+python-dotenv
+
+# Google AI/ML/Vision Libraries (for future/planned AI comprehension in Beam pipeline)
+#google-cloud-vision
+#google-cloud-videointelligence
+#google-generativeai
