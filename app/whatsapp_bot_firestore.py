@@ -101,7 +101,7 @@ def publish_trigger_event_to_pubsub(payload):
         data_json = build_pubsub_payload(payload)
         future = publisher.publish(PUBSUB_TOPIC_PATH_TRIGGER, data_json.encode('utf-8'))
         print(
-            f"Published trigger event to {PUBSUB_TOPIC_ID_TRIGGER} with ID: {future.result()} for SID: {message_sid}")
+            f"Published trigger event to {PUBSUB_TOPIC_ID_TRIGGER} with ID: {future.result()} for SID: {payload['message_sid']}")
         return True
     except Exception as e:
         print(f"Failed to publish trigger event to Pub/Sub: {e}")
@@ -207,6 +207,8 @@ def handle_twilio_message():
                             original_payload[
                                 'media_gcs_uri'] = media_gcs_uri_temp  # Set the final GCS URI
                             original_payload['media_content_type'] = media_content_type_from_session
+                            signed_url = blob.generate_signed_url(expiration=expiration)
+                            original_payload['media_authenticated_url'] = signed_url
 
                             # Update message_type from 'media_pending_location' to actual type
                             if media_content_type_from_session.startswith('image/'):

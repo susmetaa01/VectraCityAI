@@ -1,14 +1,14 @@
-# src/transforms/data_normalizer.py
 import apache_beam as beam
 import json
 import logging
-import uuid # <-- NEW: For generating UUIDs if needed for event_id
+import uuid # For generating UUIDs if needed for event_id
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List # Added List for type hinting
 
-# Relative imports from your project structure
-from ..model.incoming_events import AnalyzeInput, Geolocation, DataInput # <-- UPDATED: Import AnalyzeInput, DataInput
-from ..utils.geocoding_utils import reverse_geocode, GeocodingError # <-- NEW: For reverse geocoding
+# Relative imports
+# Corrected import path based on likely user refactoring from 'schemas' to 'model.incoming_events'
+from ..model.incoming_events import AnalyzeInput, Geolocation, DataInput
+from ..utils.geocoding_utils import reverse_geocode, GeocodingError
 
 logger = logging.getLogger('beam_data_normalizer')
 if not logger.handlers:
@@ -28,8 +28,11 @@ def _normalize_event_fields(event_data: Dict[str, Any], source_type: str) -> Dic
     media_gcs_uri: Optional[str] = None
     media_content_type: Optional[str] = None
     event_timestamp_str: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+
+    # Initialize latitude/longitude extracted from source
+    extracted_latitude_from_source: Optional[Any] = None
+    extracted_longitude_from_source: Optional[Any] = None
+
     address_info: Optional[str] = None
     optional_info_parts: List[str] = [] # Collect various extra details here
 
@@ -38,72 +41,95 @@ def _normalize_event_fields(event_data: Dict[str, Any], source_type: str) -> Dic
     if source_type == "whatsapp":
         information_text = event_data.get('text_body')
         event_timestamp_str = event_data.get('timestamp')
-        latitude = float(event_data['latitude']) if event_data.get('latitude') is not None else None
-        longitude = float(event_data['longitude']) if event_data.get('longitude') is not None else None
+        extracted_latitude_from_source = event_data.get('latitude')
+        extracted_longitude_from_source = event_data.get('longitude')
         address_info = event_data.get('address') or event_data.get('label')
         media_gcs_uri = event_data.get('media_gcs_uri')
         media_content_type = event_data.get('media_content_type')
         if event_data.get('location_resolved'): optional_info_parts.append("Location was user-provided.")
-        # Add other WhatsApp-specific fields to optional_info_parts if relevant
 
     elif source_type == "twitter":
         information_text = event_data.get('text')
         event_timestamp_str = event_data.get('created_at') # Needs robust parsing
-        latitude = float(event_data['geo_coordinates_lat']) if event_data.get('geo_coordinates_lat') is not None else None
-        longitude = float(event_data['geo_coordinates_lon']) if event_data.get('geo_coordinates_lon') is not None else None
+        extracted_latitude_from_source = event_data.get('geo_coordinates_lat')
+        extracted_longitude_from_source = event_data.get('geo_coordinates_lon')
         address_info = event_data.get('place_name')
         optional_info_parts.append(f"Tweet ID: {event_data.get('tweet_id')}, User: @{event_data.get('user_screen_name')}")
         if event_data.get('hashtags'): optional_info_parts.append(f"Hashtags: {', '.join(event_data['hashtags'])}")
-        # Twitter media typically handled separately or linked via URLs in text, not direct GCS upload from bot
 
     elif source_type == "googlenews":
         information_text = event_data.get('summary') or event_data.get('title')
         event_timestamp_str = event_data.get('published_date') # Needs robust parsing
+        # Google News typically does not have direct lat/lon, so extracted_latitude/longitude will likely be None.
         address_info = event_data.get('address_info') # Might already be populated if geocoded by ingestor
         optional_info_parts.append(f"Source: Google News, Article ID: {event_data.get('article_id')}, Link: {event_data.get('link')}")
-        # News articles typically don't have media for direct AI comprehension unless explicitly extracted
+
+    # --- Convert extracted lat/lon to float or ensure None explicitly ---
+    latitude_for_geo_obj: Optional[float] = None
+    longitude_for_geo_obj: Optional[float] = None
+
+    if extracted_latitude_from_source is not None:
+        try:
+            latitude_for_geo_obj = float(extracted_latitude_from_source)
+        except (ValueError, TypeError):
+            logger.warning(f"Could not convert latitude '{extracted_latitude_from_source}' to float. Setting to None.")
+            latitude_for_geo_obj = None
+
+    if extracted_longitude_from_source is not None:
+        try:
+            longitude_for_geo_obj = float(extracted_longitude_from_source)
+        except (ValueError, TypeError):
+            logger.warning(f"Could not convert longitude '{extracted_longitude_from_source}' to float. Setting to None.")
+            longitude_for_geo_obj = None
 
     # --- Standardize Timestamp ---
     if event_timestamp_str:
         try:
-            import dateutil.parser # This library is very robust for parsing various date strings
+            import dateutil.parser
             event_timestamp_str = dateutil.parser.parse(event_timestamp_str).isoformat()
         except Exception:
             logger.warning(f"Could not parse timestamp '{event_timestamp_str}' for event. Falling back to now.")
-            event_timestamp_str = datetime.utcnow().isoformat() # Fallback
+            event_timestamp_str = datetime.utcnow().isoformat()
 
     # --- Reverse Geocoding (if lat/lon are present but no full address) ---
-    # This ensures comprehensive location info for AI and maps, if not already provided
-    if latitude is not None and longitude is not None:
+    geo_area, geo_sublocation, geo_formatted_address = None, None, None
+    if latitude_for_geo_obj is not None and longitude_for_geo_obj is not None and not address_info:
         try:
-            geo_details = reverse_geocode(latitude, longitude)
+            geo_details = reverse_geocode(latitude_for_geo_obj, longitude_for_geo_obj)
             if geo_details:
-                # Prioritize existing address if explicit, otherwise use geocoded
-                address_info = address_info or geo_details.get("formatted_address")
-                # Populate area/sublocation from geocoding
+                geo_formatted_address = geo_details.get("formatted_address")
                 geo_area = geo_details.get("area")
                 geo_sublocation = geo_details.get("sublocation")
+                logger.info(f"Reverse geocoded: Lat/Lon ({latitude_for_geo_obj}, {longitude_for_geo_obj}) -> Area: {geo_area}, Subloc: {geo_sublocation}")
             else:
-                geo_area, geo_sublocation = None, None
+                logger.warning(f"No geocoding results for ({latitude_for_geo_obj}, {longitude_for_geo_obj}).")
         except GeocodingError as e:
-            logger.error(f"Reverse geocoding failed for ({latitude}, {longitude}): {e}")
-            geo_area, geo_sublocation = None, None
+            logger.error(f"Reverse geocoding failed for ({latitude_for_geo_obj}, {longitude_for_geo_obj}): {e}")
             optional_info_parts.append(f"Geocoding Error: {e}")
         except Exception as e:
-            logger.error(f"Unexpected error during reverse geocoding for ({latitude}, {longitude}): {e}")
-            geo_area, geo_sublocation = None, None
+            logger.error(f"Unexpected error during reverse geocoding for ({latitude_for_geo_obj}, {longitude_for_geo_obj}): {e}")
             optional_info_parts.append(f"Unexpected Geocoding Error: {e}")
     else:
-        geo_area, geo_sublocation = None, None # No lat/lon, no geocoding
+        logger.info("Skipping reverse geocoding: Latitude/Longitude missing or address already present.")
 
-    # --- Construct Geolocation Pydantic Model ---
-    geolocation_obj = Geolocation(
-        latitude=latitude,
-        longitude=longitude,
-        address=address_info,
-        area=geo_area,
-        sublocation=geo_sublocation
-    )
+
+    # --- Construct Geolocation Pydantic Model with conditional parameters ---
+    geolocation_kwargs: Dict[str, Any] = {}
+    if latitude_for_geo_obj is not None:
+        geolocation_kwargs['latitude'] = latitude_for_geo_obj
+    if longitude_for_geo_obj is not None:
+        geolocation_kwargs['longitude'] = longitude_for_geo_obj
+
+    final_address = address_info or geo_formatted_address
+    if final_address is not None:
+        geolocation_kwargs['address'] = final_address
+    if geo_area is not None:
+        geolocation_kwargs['area'] = geo_area
+    if geo_sublocation is not None:
+        geolocation_kwargs['sublocation'] = geo_sublocation
+
+    geolocation_obj = Geolocation(**geolocation_kwargs)
+
 
     # --- Construct DataInput Pydantic Model (if media exists) ---
     data_input_obj: Optional[DataInput] = None
@@ -116,11 +142,10 @@ def _normalize_event_fields(event_data: Dict[str, Any], source_type: str) -> Dic
 
 
     # --- Construct the final AnalyzeInput compatible dictionary ---
-    # This dictionary will be passed to AIComprehensionFn
     analyze_input_payload = {
-        "data": data_input_obj.model_dump() if data_input_obj else None, # Use model_dump() for dict representation
+        "data": data_input_obj.model_dump() if data_input_obj else None,
         "information": information_text,
-        "geolocation": geolocation_obj.model_dump(), # Use model_dump() for dict representation
+        "geolocation": geolocation_obj.model_dump(), # Convert Pydantic model to dict
         "timestamp": event_timestamp_str,
         "optional_information": "\n".join(optional_info_parts) if optional_info_parts else None
     }
@@ -148,4 +173,23 @@ class ComprehendFn(beam.DoFn):
         elif "article_id" in element and "source" in element and element["source"] == "Google News RSS":
             source_type = "googlenews"
 
-        yield _normalize_event_fields(element, source_type)
+        normalized_event = _normalize_event_fields(element, source_type)
+        print("NORMALISED EVENT: {}",normalized_event)
+        yield normalized_event
+
+        # try: # <-- NEW: Added try-except block for robust processing
+        #     normalized_event = _normalize_event_fields(element, source_type)
+        #     print("TYPE: {}",type(normalized_event))
+        #     yield normalized_event
+        # except Exception as e:
+        #     # Catch any error during normalization, log it, and discard the element
+        #     error_info = {
+        #         "error_stage": "ComprehendFn_normalization",
+        #         "error_message": str(e),
+        #         "original_element_raw": json.dumps(element, indent=2), # Store the original element that caused error
+        #         "source_type": source_type,
+        #         "timestamp_utc": datetime.now().isoformat()
+        #     }
+        #     logger.error(f"Error in ComprehendFn for element from {source_type}: {e}\nOriginal Element: {json.dumps(element, indent=2)}", exc_info=True)
+        #     # Do NOT yield, effectively dropping the malformed element from the pipeline.
+        #     # In a production setting, you might yield error_info to a dead-letter queue.

@@ -4,6 +4,8 @@ import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, GoogleCloudOptions
 import os
 
+from dotenv import load_dotenv
+
 # Relative imports from your newly created 'src' package
 from . import config
 from . import io_connectors
@@ -13,7 +15,7 @@ from . import analyze
 
 from .parse import raw_data_parser # For ParseTweetFn
 from .parse import data_normaliser  # For ComprehendFn
-from .analyze import ai_analyzer
+from .analyze import gemini_analyzer
 
 def run_pipeline():
     """
@@ -22,6 +24,7 @@ def run_pipeline():
     and prints the parsed payloads.
     """
     pipeline_options = PipelineOptions()
+    load_dotenv()
 
     # Configure common pipeline options for Dataflow deployment
     # pipeline_options.view_as(StandardOptions).runner = 'DataflowRunner' # Use 'DirectRunner' for local testing
@@ -41,8 +44,8 @@ def run_pipeline():
                 | 'DecodeAndParseFullWhatsAppJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8')))
                 # | 'PrintRawWhatsAppFullEvent' >> beam.Map(lambda x: print(f"RAW WhatsApp Full Event: {x}")) # Debug raw input
                 | 'ComprehendWhatsAppEvent' >> beam.ParDo(parse.data_normaliser.ComprehendFn())
-                | 'PrintWhatsAppComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended WhatsApp Event: {x}")) # Debug normalized
-                | 'AnalyzeWhatsAppEventsWithGemini' >> beam.ParDo(ai_analyzer.AIComprehensionFn())
+                # | 'PrintWhatsAppComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended WhatsApp Event: {x}")) # Debug normalized
+                | 'AnalyzeWhatsAppEventsWithGemini' >> beam.ParDo(analyze.gemini_analyzer.AIComprehensionFn())
                 | 'PrintWhatsAppAnalyzedEvent' >> beam.Map(lambda x: print(f"Analyzed WhatsApp Event: {x}"))
         )
 
@@ -55,22 +58,22 @@ def run_pipeline():
                 # | 'PrintParsedTweet' >> beam.Map(lambda x: print(f"Parsed Twitter Tweet: {x}")) # Debug parsed
                 | 'ComprehendTwitterEvent' >> beam.ParDo(data_normaliser.ComprehendFn())
                 | 'PrintTwitterComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended Twitter Event: {x}")) # Debug normalized
-                | 'AnalyzeTwitterEventsWithGemini' >> beam.ParDo(ai_analyzer.AIComprehensionFn())
+                | 'AnalyzeTwitterEventsWithGemini' >> beam.ParDo(gemini_analyzer.AIComprehensionFn())
                 | 'PrintTwitterAnalyzedEvent' >> beam.Map(lambda x: print(f"Analyzed Twitter Event: {x}"))
         )
 
         # --- Branch 3: Raw Google News Feed ---
         # Raw data -> Decoding/Parsing -> Normalization -> AI Analysis
-        google_news_pipeline = (
-                pipeline
-                | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
-                | 'DecodeAndParseNewsJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8')))
-                # | 'PrintParsedNewsArticle' >> beam.Map(lambda x: print(f"Parsed News Article: {x}")) # Debug parsed
-                | 'ComprehendNewsArticle' >> beam.ParDo(data_normaliser.ComprehendFn())
-                | 'PrintComprehendedNewsArticle' >> beam.Map(lambda x: print(f"Comprehended News Article: {x}")) # Debug normalized
-                | 'AnalyzeNewsArticlesWithGemini' >> beam.ParDo(ai_analyzer.AIComprehensionFn())
-                | 'PrintAnalyzedNewsArticle' >> beam.Map(lambda x: print(f"Analyzed News Article: {x}"))
-        )
+        # google_news_pipeline = (
+        #         pipeline
+        #         | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
+        #         | 'DecodeAndParseNewsJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8')))
+        #         # | 'PrintParsedNewsArticle' >> beam.Map(lambda x: print(f"Parsed News Article: {x}")) # Debug parsed
+        #         | 'ComprehendNewsArticle' >> beam.ParDo(data_normaliser.ComprehendFn())
+        #         | 'PrintComprehendedNewsArticle' >> beam.Map(lambda x: print(f"Comprehended News Article: {x}")) # Debug normalized
+        #         | 'AnalyzeNewsArticlesWithGemini' >> beam.ParDo(gemini_analyzer.AIComprehensionFn())
+        #         | 'PrintAnalyzedNewsArticle' >> beam.Map(lambda x: print(f"Analyzed News Article: {x}"))
+        # )
 
         # --- Trigger Event Listener (Separate Branch, No AI Analysis on triggers) ---
         # This branch reads only the SIDs of WhatsApp events that have been fully processed.

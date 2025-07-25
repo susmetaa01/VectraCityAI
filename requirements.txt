@@ -31,6 +31,6 @@ googlemaps
 python-dotenv
 
 # Google AI/ML/Vision Libraries (for future/planned AI comprehension in Beam pipeline)
-#google-cloud-vision
-#google-cloud-videointelligence
-#google-generativeai
+google-cloud-vision
+google-cloud-videointelligence
+google-generativeai

@@ -25,6 +25,10 @@ export PUBSUB_SUBSCRIPTION_NAME_TRIGGER="vectraCityAI-event-trigger-sub"
 export PUBSUB_SUBSCRIPTION_NAME_TWITTER="twitter-incoming-raw-events-sub"
 export PUBSUB_TOPIC_GNEWS_RAW_NEWS="gnews-incoming-raw-events-sub"
 
+export GEMINI_API_KEY="AIzaSyAoje8vVTrVcqLCwGtx9lVyNzMPXFRyYPw"
+export GOOGLE_MAPS_API_KEY="AIzaSyAJ7r-hVzCqkQ9mPq_DHDVTiDSRUCcFK74"
+
+
 
 
 # --- 4. Google Cloud Storage Buckets ---

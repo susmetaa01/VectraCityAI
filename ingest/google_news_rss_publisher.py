@@ -24,7 +24,7 @@ RSS_FEED_URLS = [
     "https://news.google.com/rss/search?q=Indiranagar+Bengaluru&hl=en-IN&gl=IN&ceid=IN:en",
 ]
 
-POLLING_INTERVAL_SECONDS = 300 # Poll every 5 minutes (300 seconds)
+POLLING_INTERVAL_SECONDS = 120 # Poll every 5 minutes (300 seconds)
 
 # --- Pub/Sub Publisher Client ---
 publisher = pubsub_v1.PublisherClient()
