@@ -207,8 +207,6 @@ def handle_twilio_message():
                             original_payload[
                                 'media_gcs_uri'] = media_gcs_uri_temp  # Set the final GCS URI
                             original_payload['media_content_type'] = media_content_type_from_session
-                            signed_url = blob.generate_signed_url(expiration=expiration)
-                            original_payload['media_authenticated_url'] = signed_url
 
                             # Update message_type from 'media_pending_location' to actual type
                             if media_content_type_from_session.startswith('image/'):
