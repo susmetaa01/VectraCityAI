@@ -2,18 +2,11 @@ import json
 
 import apache_beam as beam
 from apache_beam.io.gcp.bigquery import BigQueryDisposition
-#beam.io.gcp.bigquery.WriteToBigQuery
-from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, GoogleCloudOptions
-
-from apache_beam.io.gcp.bigquery import ReadFromBigQuery
+from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, \
+    GoogleCloudOptions
 import os
 
 from dotenv import load_dotenv
-
-# Import BigQuery specific options
-# Ensure your Apache Beam version is 2.30.0 or higher for these imports to work directly.
-# If not, you might need to upgrade Beam or import from bigquery_tools (less recommended).
-# from apache_beam.io.gcp.bigquery_tools import BigQueryDisposition, WriteDisposition
 
 # Relative imports from your newly created 'src' package
 from . import config
@@ -22,9 +15,10 @@ from . import transform
 from . import parse
 from . import analyze
 
-from .parse import raw_data_parser # For ParseTweetFn
+from .parse import raw_data_parser  # For ParseTweetFn
 from .parse import data_normaliser  # For ComprehendFn
 from .analyze import gemini_analyzer
+
 
 def run_pipeline():
     """
@@ -41,33 +35,34 @@ def run_pipeline():
     pipeline_options.view_as(GoogleCloudOptions).region = config.DATAFLOW_REGION
     pipeline_options.view_as(GoogleCloudOptions).temp_location = config.GCS_TEMP_LOCATION
     pipeline_options.view_as(GoogleCloudOptions).staging_location = config.GCS_STAGING_LOCATION
-    pipeline_options.view_as(StandardOptions).streaming = True # Essential for Pub/Sub sources
+    pipeline_options.view_as(StandardOptions).streaming = True  # Essential for Pub/Sub sources
 
     # Define the BigQuery table name
     # Format: project_id:dataset_id.table_id
     bigquery_table = f"{config.GCP_PROJECT_ID}:{config.BIGQUERY_DATASET_ID}.{config.BIGQUERY_TABLE_ID}"
-    bigquery_schema =  {
-        'fields':[
-            {'name':'id', 'type':'STRING', 'mode':'REQUIRED'},
-            {'name':'record_time', 'type':'TIMESTAMP', 'mode':'REQUIRED'},
-            {'name':'geography', 'type':'GEOGRAPHY', 'mode':'REQUIRED'},
-            {'name':'location', 'type':'STRING', 'mode':'REQUIRED'},
-            {'name':'sub_location', 'type':'STRING', 'mode':'NULLABLE'},
-            {'name':'category', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
-                {'name':'name', 'type':'STRING', 'mode':'REQUIRED'},
-                {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'},
+    bigquery_schema = {
+        'fields': [
+            {'name': 'id', 'type': 'STRING', 'mode': 'REQUIRED'},
+            {'name': 'record_time', 'type': 'TIMESTAMP', 'mode': 'REQUIRED'},
+            {'name': 'latitude', 'type': 'FLOAT', 'mode': 'REQUIRED'},
+            {'name': 'longitude', 'type': 'FLOAT', 'mode': 'REQUIRED'},
+            {'name': 'location', 'type': 'STRING', 'mode': 'REQUIRED'},
+            {'name': 'sub_location', 'type': 'STRING', 'mode': 'NULLABLE'},
+            {'name': 'category', 'type': 'RECORD', 'mode': 'REPEATED', 'fields': [
+                {'name': 'name', 'type': 'STRING', 'mode': 'REQUIRED'},
+                {'name': 'relevancy', 'type': 'FLOAT', 'mode': 'REQUIRED'},
             ]},
-            {'name':'name', 'type':'STRING', 'mode':'REQUIRED'},
-            {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'},
-            {'name':'sub_category', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
-                {'name':'name', 'type':'STRING', 'mode':'NULLABLE'},
-                {'name':'relevancy', 'type':'FLOAT', 'mode':'NULLABLE'},
+            {'name': 'name', 'type': 'STRING', 'mode': 'REQUIRED'},
+            {'name': 'relevancy', 'type': 'FLOAT', 'mode': 'REQUIRED'},
+            {'name': 'sub_category', 'type': 'RECORD', 'mode': 'REPEATED', 'fields': [
+                {'name': 'name', 'type': 'STRING', 'mode': 'NULLABLE'},
+                {'name': 'relevancy', 'type': 'FLOAT', 'mode': 'NULLABLE'},
             ]},
-            {'name':'source', 'type':'STRING', 'mode':'REQUIRED'},
-            {'name':'ai_analysis', 'type':'STRING', 'mode':'REQUIRED'},
-            {'name':'department', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
-                {'name':'name', 'type':'STRING', 'mode':'REQUIRED'},
-                {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'},
+            {'name': 'source', 'type': 'STRING', 'mode': 'REQUIRED'},
+            {'name': 'ai_analysis', 'type': 'STRING', 'mode': 'REQUIRED'},
+            {'name': 'department', 'type': 'RECORD', 'mode': 'REPEATED', 'fields': [
+                {'name': 'name', 'type': 'STRING', 'mode': 'REQUIRED'},
+                {'name': 'relevancy', 'type': 'FLOAT', 'mode': 'REQUIRED'},
             ]},
         ]
     }
@@ -79,21 +74,23 @@ def run_pipeline():
                 | 'ReadFullWhatsAppEvents' >> beam.io.ReadFromPubSub(
             subscription=f"projects/{config.GCP_PROJECT_ID}/subscriptions/{config.PUBSUB_TOPIC_ID_INCOMING}-sub"
         )
-                | 'DecodeAndParseFullWhatsAppJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8')))
+                | 'DecodeAndParseFullWhatsAppJson' >> beam.Map(
+            lambda element: json.loads(element.decode('utf-8')))
                 # | 'PrintRawWhatsAppFullEvent' >> beam.Map(lambda x: print(f"RAW WhatsApp Full Event: {x}")) # Debug raw input
                 | 'ComprehendWhatsAppEvent' >> beam.ParDo(parse.data_normaliser.ComprehendFn())
                 # | 'PrintWhatsAppComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended WhatsApp Event: {x}")) # Debug normalized
-                | 'AnalyzeWhatsAppEventsWithGemini' >> beam.ParDo(analyze.gemini_analyzer.AIComprehensionFn())
+                | 'AnalyzeWhatsAppEventsWithGemini' >> beam.ParDo(
+            analyze.gemini_analyzer.AIComprehensionFn())
                 # --- NEW: Write to BigQuery ---
                 | 'WriteWhatsAppAnalyzedToBigQuery' >> beam.io.WriteToBigQuery(
-            table=bigquery_table, # CORRECTED: Use the bigquery_table variable
-            schema=bigquery_schema, # Beam will try to infer the schema.
+            table=bigquery_table,  # CORRECTED: Use the bigquery_table variable
+            schema=bigquery_schema,  # Beam will try to infer the schema.
             # For production, define an explicit schema for robustness.
             create_disposition=BigQueryDisposition.CREATE_IF_NEEDED,
-            write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND, # Append to the table
+            write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,  # Append to the table
             # For streaming, STORAGE_WRITE_API is highly recommended for exactly-once semantics
             method=beam.io.WriteToBigQuery.Method.STORAGE_WRITE_API,
-            with_auto_sharding=True # Recommended for better parallelism and throughput
+            with_auto_sharding=True
         )
         )
 
@@ -105,9 +102,12 @@ def run_pipeline():
                 | 'ParseTwitterTweetData' >> beam.ParDo(raw_data_parser.ParseTweetFn())
                 # | 'PrintParsedTweet' >> beam.Map(lambda x: print(f"Parsed Twitter Tweet: {x}")) # Debug parsed
                 | 'ComprehendTwitterEvent' >> beam.ParDo(data_normaliser.ComprehendFn())
-                | 'PrintTwitterComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended Twitter Event: {x}")) # Debug normalized
-                | 'AnalyzeTwitterEventsWithGemini' >> beam.ParDo(gemini_analyzer.AIComprehensionFn())
-                | 'PrintTwitterAnalyzedEvent' >> beam.Map(lambda x: print(f"Analyzed Twitter Event: {x}"))
+                | 'PrintTwitterComprehendedEvent' >> beam.Map(
+            lambda x: print(f"Comprehended Twitter Event: {x}"))  # Debug normalized
+                | 'AnalyzeTwitterEventsWithGemini' >> beam.ParDo(
+            gemini_analyzer.AIComprehensionFn())
+                | 'PrintTwitterAnalyzedEvent' >> beam.Map(
+            lambda x: print(f"Analyzed Twitter Event: {x}"))
         )
 
         # --- Branch 3: Raw Google News Feed (commented out) ---
@@ -124,11 +124,12 @@ def run_pipeline():
 
         # --- Trigger Event Listener (Separate Branch, No AI Analysis on triggers) ---
         # This branch reads only the SIDs of WhatsApp events that have been fully processed.
-        whatsapp_trigger_listener = (
-                pipeline
-                | 'ReadWhatsAppTriggerEvents' >> io_connectors.ReadTriggerEvents()
-                | 'PrintWhatsAppTriggerPayload' >> beam.Map(lambda x: print(f"WhatsApp Trigger Event (SID only): {x}"))
-        )
+        # whatsapp_trigger_listener = (
+        #         pipeline
+        #         | 'ReadWhatsAppTriggerEvents' >> io_connectors.ReadTriggerEvents()
+        #         | 'PrintWhatsAppTriggerPayload' >> beam.Map(
+        #     lambda x: print(f"WhatsApp Trigger Event (SID only): {x}"))
+        # )
 
         # --- Final Sink ---
         # The analyzed streams (whatsapp_analyzed_events, twitter_analyzed_events, news_analyzed_articles)

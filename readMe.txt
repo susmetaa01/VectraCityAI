@@ -8,4 +8,5 @@ chmod +x server_init.sh
 ./server_init.sh
 python ingest/twitter_stream_publisher.py
 python ingest/google_news_rss_publisher.py
+gcloud auth application-default login
 ```
