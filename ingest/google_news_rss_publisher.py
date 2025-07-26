@@ -38,9 +38,9 @@ CACHE_CLEANUP_INTERVAL_SECONDS = 3600 # Clear cache every hour
 
 current_time = datetime.now()
 
-area = ["bangalore"]
-news_tags = ["traffic, floods, power cut, bbmp, municipality, drainage, protests, accidents, rallies, events"]
-news_timedelta_days = 150
+area = ["bangalore","bengaluru"]
+news_tags = ["traffic, floods, power cut, bbmp, municipality, drainage, protests, accidents, rallies, events, sewage, garbage, drought, alert, warning, caution, stampede, draught, scarcity"]
+news_timedelta_days = 30
 client = genai.Client()
 
 
