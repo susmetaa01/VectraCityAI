@@ -77,6 +77,7 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
 
 
         event_timestamp_iso = datetime.now().isoformat()
+        severity = 'P3'
 
         print(extracted_data)
 
@@ -98,7 +99,7 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
         )
         VALUES (
             '{extracted_data.get('record_id')}',
-            TIMESTAMP'{event_timestamp_iso},
+            TIMESTAMP'{event_timestamp_iso}',
             'NULL',
             'NULL',
             '{extracted_data.get('location')}',
@@ -107,8 +108,8 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
             {sub_category_bq_string},
             '{extracted_data.get('source')}',
             '{extracted_data.get('ai_analysis_summary')}',
-            {department_bq_string},
-            'P3'
+            '{department_bq_string}',
+            '{severity}'
         );
         """
 
