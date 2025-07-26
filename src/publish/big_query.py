@@ -59,7 +59,7 @@ class BigQuerySqlInsertFn(beam.DoFn):
             sub_category_bq_format.append(f"STRUCT('{sub_cat.get('category')}' AS name, {sub_cat.get('relevancy_score')} AS relevancy)")
         sub_category_bq_string = f"[{', '.join(sub_category_bq_format)}]" if sub_category_bq_format else "[]"
 
-        source = parsed_data.get('source', 'Unknown') # Get source from parsed data, or default
+        source = parsed_data.get('source', 'whatsapp') # Get source from parsed data, or default
         ai_analysis_summary = parsed_data.get('summary', '')
 
         department_list = parsed_data.get('department', [])
@@ -100,7 +100,7 @@ class BigQuerySqlInsertFn(beam.DoFn):
             '{ai_analysis_summary}',
             {department_bq_string},
             '{severity}',
-            '{sentiment}'
+            {sentiment}
         );
         """
 

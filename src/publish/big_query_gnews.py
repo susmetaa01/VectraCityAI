@@ -93,7 +93,8 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
 
         record_id = str(uuid.uuid4())
         record_time_iso = datetime.utcnow().isoformat(timespec='microseconds')
-        severity = 'P3'
+        severity = data.get('severity', 'P3')
+        sentiment = data.get('sentiment', 0)
 
         print(f"Generated Record ID: {record_id}")
         # Removed print(extracted_data) as it might contain unescaped versions
@@ -112,7 +113,8 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
             source,
             ai_analysis,
             department,
-            severity
+            severity,
+            sentiment
         )
         VALUES (
             '{record_id}',
@@ -126,7 +128,8 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
             'google_news',
             '{ai_analysis_for_sql}',  -- Use the correctly escaped string
             {department_bq_string},
-            '{severity}'
+            '{severity}',
+            {sentiment}
         );
         """
 
