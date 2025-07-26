@@ -1,6 +1,6 @@
 # src/model/incoming_events.py (or src/schemas.py)
 import logging
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field # Ensure Field is imported if used elsewhere
 # from pydantic import model_validator # No longer needed for Geolocation
 from datetime import datetime
@@ -68,3 +68,6 @@ class AnalyzeInput(BaseModel):
     geolocation: Geolocation # Geolocation information, potentially populated by normalization
     timestamp: Optional[str] = Field(None, description="Timestamp of the event (ISO format).")
     optional_information: Optional[str] = Field(None, description="Any other pertinent details or context.")
+    source: Optional[str] = Field(None, description="Source of the event (e.g., WhatsApp, Twitter, News).")
+    severity: Optional[Literal["P0", "P1", "P2", "P3", "P4", "P5"]] = Field(None, description="Severity of the event. Can be classified into 5 categories only P0, P1, P2, P3, P4, P5, where P0 is highest severity")
+    sentiment: Optional[Literal[1, 0, -1]] = Field(None, description="Sentiment expressed in the event. Can be of only three categories: Positive is 1, Neutral is 0, Negative -1.")
