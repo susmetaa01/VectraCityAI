@@ -40,7 +40,7 @@ current_time = datetime.now()
 
 area = ["bangalore","bengaluru"]
 news_tags = ["traffic, floods, power cut, bbmp, municipality, drainage, protests, accidents, rallies, events, sewage, garbage, drought, alert, warning, caution, stampede, draught, scarcity"]
-news_timedelta_days = 400
+news_timedelta_days = 60
 client = genai.Client()
 
 
@@ -65,6 +65,7 @@ def get_google_news_prompt(start_time, end_time, area, tags):
         - Incase SLA is more than 3 days, then mark it as P3.
         - Incase SLA is more than 7 days, then mark it as P4.
         - Incase SLA is more than 15 days, then mark it as P5.
+        - Make sure the severity is only one of P0, P1, P2, P3, P4, P5. Otherwise return P5 by default
     
     !!NOTE: If there is no news strictly between the timestamps mentioned, just return "NO_NEWS". Dont add news published
     outside the time range given above.
