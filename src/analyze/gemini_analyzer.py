@@ -127,7 +127,8 @@ class AIComprehensionFn(beam.DoFn):
         try:
             # Parse the JSON response from Gemini
             parsed_response = json.loads(response.text)
-            return parsed_response
+            logger.info(f"parsed_response: {parsed_response}")
+            yield response
         except json.JSONDecodeError as e:
             logger.error(f"Error parsing JSON response: {e}")
             logger.error(f"Raw response: {response.text}")

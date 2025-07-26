@@ -1,6 +1,8 @@
 from google.cloud import bigquery
 import logging
 import apache_beam as beam
+from datetime import datetime
+import uuid # Import uuid for generating unique IDs
 
 # Initialize a BigQuery client
 client = bigquery.Client()
@@ -12,11 +14,53 @@ table_id = "schrodingers-cat-466413.vectraCityRaw.LivePulse"
 class BigQuerySqlInsertFn(beam.DoFn):
 
     def process(self, element):
-
         print(f"ELEMENT REACHED PUBLISH: {element}")
 
-        sql_insert_statement = """
-        INSERT INTO {} (
+        # Extract fields from the element dictionary
+        # Generate a unique ID for each record
+        record_id = str(uuid.uuid4())
+        record_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f UTC')[:-3] + ' UTC' # Current UTC time
+
+        # element.get('text') = element.get('text')
+
+        latitude = element.get('text').get('location', {}).get('latitude')
+        longitude = element.get('text').get('location', {}).get('longitude')
+        location = element.get('text').get('location', {}).get('area')
+        sub_location = element.get('text').get('location', {}).get('sublocation')
+
+        # Category and Sub-category from AI analysis, defaulting to empty list if not present
+        category_list = element.get('text').get('ai_analysis', {}).get('category', [])
+        sub_category_list = element.get('text').get('ai_analysis', {}).get('sub_category', [])
+
+        # Format category and sub_category as BQ STRUCT array strings
+        category_bq_format = []
+        for cat in category_list:
+            category_bq_format.append(f"STRUCT('{cat['category']}' AS name, {cat['relevancy_score']} AS relevancy)")
+        category_bq_string = f"[{', '.join(category_bq_format)}]" if category_bq_format else "[]"
+
+        sub_category_bq_format = []
+        for sub_cat in sub_category_list:
+            sub_category_bq_format.append(f"STRUCT('{sub_cat['sub_category']}' AS name, {sub_cat['relevancy_score']} AS relevancy)")
+        sub_category_bq_string = f"[{', '.join(sub_category_bq_format)}]" if sub_category_bq_format else "[]"
+
+
+        source = element.get('source', 'Unknown') # Assuming 'source' might be at the top level
+        ai_analysis_summary = element.get('summary', '') # Use 'summary' as ai_analysis
+
+        # Department from the 'department' list, defaulting to empty list if not present
+        department_list = element.get('department', [])
+        department_bq_format = []
+        for dept in department_list:
+            department_bq_format.append(f"STRUCT('{dept['department']}' AS name, {dept['relevancy_score']} AS relevancy)")
+        department_bq_string = f"[{', '.join(department_bq_format)}]" if department_bq_format else "[]"
+
+
+        # Severity is not directly available in the sample, defaulting to a placeholder
+        # You'll need to determine how 'severity' is derived in your actual pipeline
+        severity = element.get('severity', 'P3') # Defaulting to 'P3' as it's not in sample
+
+        sql_insert_statement = f"""
+        INSERT INTO {table_id} (
             id,
             record_time,
             latitude,
@@ -31,20 +75,20 @@ class BigQuerySqlInsertFn(beam.DoFn):
             severity
         )
         VALUES (
-            'test_pulse1',
-            '2025-07-26 10:30:00.12 UTC',
-            -74.0060,
-            -40.7128,
-            'New York City',
-            'Manhattan',
-            [STRUCT('Road' AS name, 0.95 AS relevancy)],
-            [],
-            'Waze_Report',
-            'Heavy traffic detected on major arteries due to an unexpected event. Expected delays of 30-45 minutes.',
-            [STRUCT('Municipality' AS name, 0.87 AS relevancy)],
-            'P1'
+            '{record_id}',
+            '{record_time}',
+            {latitude},
+            {longitude},
+            '{location}',
+            '{sub_location}',
+            {category_bq_string},
+            {sub_category_bq_string},
+            '{source}',
+            '{ai_analysis_summary}',
+            {department_bq_string},
+            '{severity}'
         );
-        """.format(table_id)
+        """
 
         try:
             # Run the query
@@ -58,4 +102,6 @@ class BigQuerySqlInsertFn(beam.DoFn):
             print(f"Rows affected: {query_job.num_dml_affected_rows}")
 
         except Exception as e:
-            print(f"An error occurred: {e}")
+            logging.error(f"An error occurred during BigQuery insert: {e}")
+            logging.error(f"Failed SQL: {sql_insert_statement}") # Log the failed SQL for debugging
+            raise # Re-raise the exception to propagate the error in the pipeline

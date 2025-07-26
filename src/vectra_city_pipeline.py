@@ -62,12 +62,9 @@ def run_pipeline():
         )
                 | 'DecodeAndParseFullWhatsAppJson' >> beam.Map(
             lambda element: json.loads(element.decode('utf-8')))
-                # | 'PrintRawWhatsAppFullEvent' >> beam.Map(lambda x: print(f"RAW WhatsApp Full Event: {x}")) # Debug raw input
                 | 'ComprehendWhatsAppEvent' >> beam.ParDo(parse.data_normaliser.ComprehendFn())
-                # | 'PrintWhatsAppComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended WhatsApp Event: {x}")) # Debug normalized
                 | 'AnalyzeWhatsAppEventsWithGemini' >> beam.ParDo(
             analyze.gemini_analyzer.AIComprehensionFn())
-                # --- NEW: Write to BigQuery using SQL INSERT in ParDo ---
                 | 'WriteWhatsAppAnalyzedToBigQuerySql' >> beam.ParDo(BigQuerySqlInsertFn()
                                                                      )
         )
@@ -82,8 +79,8 @@ def run_pipeline():
                 | 'ParseTwitterTweetData' >> beam.ParDo(raw_data_parser.ParseTweetFn())
                 # | 'PrintParsedTweet' >> beam.Map(lambda x: print(f"Parsed Twitter Tweet: {x}")) # Debug parsed
                 | 'ComprehendTwitterEvent' >> beam.ParDo(data_normaliser.ComprehendFn())
-                | 'PrintTwitterComprehendedEvent' >> beam.Map(
-            lambda x: print(f"Comprehended Twitter Event: {x}"))  # Debug normalized
+                #     | 'PrintTwitterComprehendedEvent' >> beam.Map(
+                # lambda x: print(f"Comprehended Twitter Event: {x}"))  # Debug normalized
                 | 'AnalyzeTwitterEventsWithGemini' >> beam.ParDo(
             gemini_analyzer.AIComprehensionFn())
                 | 'PrintTwitterAnalyzedEvent' >> beam.Map(
