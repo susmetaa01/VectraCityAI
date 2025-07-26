@@ -113,7 +113,7 @@ def fetch_and_publish_feed():
             # Publish to Pub/Sub
             json_payload = res.model_dump_json(exclude_none=True)
             future = publisher.publish(PUBSUB_TOPIC_PATH, json_payload.encode('utf-8'))
-            print(f"Published {future} new articles.")
+            print(f"Published {json_payload} new articles.")
     except Exception as e:
         print(f"Error fetching or processing feed {current_time}: {e}")
 
