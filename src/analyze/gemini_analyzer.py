@@ -1,3 +1,8 @@
+import apache_beam as beam
+import logging
+from datetime import datetime
+from typing import Dict, Any, Optional
+
 import json
 import logging
 from datetime import datetime
@@ -8,7 +13,6 @@ import httpx
 from google import genai
 from google.genai import types
 
-from .prompts import get_root_prompt
 from ..model.incoming_events import AnalysisResponse, DataInput
 from ..utils.gcs_utils import fetch_gcs_content_as_bytes
 
@@ -19,7 +23,15 @@ logger = logging.getLogger('uvicorn.error')
 
 model_name = 'gemini-2.5-flash-lite-preview-06-17'
 
-SYSTEM_PROMPT = get_root_prompt()
+SYSTEM_PROMPT = (
+    "Your a urban intelligence analyser. You are responsible for analyzing images, text, video or audio along with geolocation information provided. Given the input do following.\n"
+    "1. Categorise the input data provided into one or more of the following categories. Also give relevancy score to it between 0 and 1. Dont categorise anything which is less than 0.5 relevancy.\n"
+    "- Road complaints\n- Power or electricity outage\n- Mob immobilisation\n- Heavy traffic congestion\n- Medical and medical requirements\n- Bomb threat\n"
+    "2. Generate 2-3 subcategory from the above categories and classify the input.\n"
+    "3. Classify to one or more of the following department with relevancy score. Dont classify if score below 0.75\n"
+    "- Municipality\n- Police\n- Ambulance\n- Traffic police\n- Fire station\n"
+    "Also provide summary of the input provided. Include information from image if given."
+)
 
 class AIComprehensionFn(beam.DoFn):
     def process(self, element: Dict[str, Any]):
@@ -28,7 +40,7 @@ class AIComprehensionFn(beam.DoFn):
 
         # Prepare the payload for Gemini
         if element is not None:
-            print(f"KHIKHIKHIKHI {element}")
+            print(f"ELEMENT {element}")
         else:
             print("Element is None")
         data_input_object = element.get('data')
@@ -109,7 +121,8 @@ class AIComprehensionFn(beam.DoFn):
         try:
             # Parse the JSON response from Gemini
             parsed_response = json.loads(response.text)
-            return parsed_response
+            logger.info(f"parsed_response: {parsed_response}")
+            yield response
         except json.JSONDecodeError as e:
             logger.error(f"Error parsing JSON response: {e}")
             logger.error(f"Raw response: {response.text}")

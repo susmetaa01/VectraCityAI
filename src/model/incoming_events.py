@@ -1,9 +1,13 @@
 # src/model/incoming_events.py (or src/schemas.py)
 import logging
+from types import NoneType
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field # Ensure Field is imported if used elsewhere
+
+from pydantic import BaseModel, Field, model_validator  # Ensure Field is imported if used elsewhere
+
+from .geocoding import forward_geocode, reverse_geocode, GeocodingError
+
 # from pydantic import model_validator # No longer needed for Geolocation
-from datetime import datetime
 
 logger = logging.getLogger('pydantic_schemas')
 if not logger.handlers:
@@ -19,7 +23,55 @@ class Geolocation(BaseModel):
     sublocation: Optional[str] = Field(None, description="Sublocation/neighborhood information (auto-populated by normalizer)")
     address: Optional[str] = Field(None, description="Formatted address (auto-populated by normalizer)")
 
-    # REMOVED: @model_validator(mode='after') and populate_location_info method.
+    @model_validator(mode='after')
+    def populate_location_info(self):
+        """Automatically populate area, sublocation, and address using reverse geocoding."""
+        # Only perform reverse geocoding if the location fields are not already populated
+        if self.area is None and self.latitude is NoneType and self.longitude is NoneType:
+            logging.error("Area and geo coordinates are None")
+            return self
+        if self.area is None or self.sublocation is None or self.address is None:
+            try:
+                logger.info(f'Performing reverse geocoding for latitude={self.latitude}, longitude={self.longitude}')
+                geo_dict = reverse_geocode(self.latitude, self.longitude)
+
+                # Only update fields that are None
+                if self.area is None:
+                    self.area = geo_dict.get("area")
+                if self.sublocation is None:
+                    self.sublocation = geo_dict.get("sublocation")
+                if self.address is None:
+                    self.address = geo_dict.get("formatted_address")
+
+                logger.info(f'Reverse geocoding completed: area={self.area}, sublocation={self.sublocation}')
+
+            except GeocodingError as e:
+                logger.error(f'Geocoding failed for coordinates ({self.latitude}, {self.longitude}): {e}')
+                # Keep the fields as None if geocoding fails
+
+            except Exception as e:
+                logger.error(f'Unexpected error during reverse geocoding: {e}')
+                # Keep the fields as None if any unexpected error occurs
+        if self.latitude is None and self.longitude is None and self.area is not None:
+            try:
+                logger.info(f'Performing forward geocoding for area={self.area}')
+                geo_dict = forward_geocode(self.area)
+
+                # Only update fields that are None
+                if self.latitude is None:
+                    self.latitude = geo_dict.get("latitude")
+                if self.longitude is None:
+                    self.longitude = geo_dict.get("longitude")
+
+                logger.info(f'Forward geocoding completed: latitude={self.latitude}, longitude={self.longitude}')
+            except GeocodingError as e:
+                logger.error(f'Geocoding failed for coordinates ({self.latitude}, {self.longitude}): {e}')
+                # Keep the fields as None if geocoding fails
+
+            except Exception as e:
+                logger.error(f'Unexpected error during reverse geocoding: {e}')
+
+        return self
 
     def __str__(self) -> str:
         parts = []
