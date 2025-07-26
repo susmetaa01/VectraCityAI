@@ -1,3 +1,8 @@
+import apache_beam as beam
+import logging
+from datetime import datetime
+from typing import Dict, Any, Optional
+
 import json
 import logging
 from datetime import datetime
@@ -35,9 +40,9 @@ class AIComprehensionFn(beam.DoFn):
 
         # Prepare the payload for Gemini
         if element is not None:
-            print(f"{element}")
+            print(f"ELEMENT {element}")
         else:
-            raise ValueError("Null input for AI comprehension")
+            print("Element is None")
         data_input_object = element.get('data')
         data_input = DataInput(**data_input_object) if data_input_object else None
         print(data_input, type(data_input))
