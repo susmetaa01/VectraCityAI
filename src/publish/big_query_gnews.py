@@ -6,7 +6,7 @@ import logging
 import apache_beam as beam
 from datetime import datetime
 import uuid # Import uuid for generating unique IDs
-import dateutil.parser # For robust date parsing
+# No longer strictly needing dateutil.parser if using datetime.utcnow().isoformat()
 
 # Initialize a BigQuery client (ensure this is done once, e.g., at the module level or passed)
 client = bigquery.Client()
@@ -22,71 +22,82 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
 
         data = element
 
+        # Extract latitude and longitude. Handle None and format for SQL.
+        latitude_value = data['location'].get('latitude')
+        longitude_value = data['location'].get('longitude')
+        latitude_for_sql = f"{latitude_value}" if latitude_value is not None else "NULL"
+        longitude_for_sql = f"{longitude_value}" if longitude_value is not None else "NULL"
 
-        extracted_data = {}
+        # --- FIXES TO STRING ESCAPING START HERE ---
 
-        extracted_data['latitude'] = data['location']['latitude']
-        extracted_data['longitude'] = data['location']['longitude']
+        # Correctly escape and assign location and sub_location
+        # Use .get() with a default empty string for robustness
+        location_for_sql = data['location'].get('area', '').replace("'", "\\'")
+        sub_location_for_sql = data['location'].get('sublocation', '').replace("'", "\\'")
 
-        try:
-            extracted_data['location'] = data['location']['area']
-        except KeyError:
-            extracted_data['location'] = None
-        try:
-            extracted_data['sub_location'] = data['location']['sublocation']
-        except KeyError:
-            extracted_data['sub_location'] = None
-
-
-        category_list = data['problem']
-        sub_category_list = []
-        for problem_cat in category_list:
-            if 'subcategory' in problem_cat:
-                sub_category_list.extend(problem_cat['subcategory'])
+        # Prepare category list, ensuring nested names are escaped
+        category_list = data.get('problem', []) # Use .get() for safety
         category_bq_format = []
-        for cat in category_list:
-            category_bq_format.append(f"STRUCT('{cat.get('category')}' AS name, {cat.get('relevancy_score')} AS relevancy)")
+        for cat_item in category_list:
+            cat_name = cat_item.get('category')
+            if cat_name is None:
+                continue
+            # Correctly escape and assign back
+            cat_name_escaped = cat_name.replace("'", "\\'")
+            category_bq_format.append(f"STRUCT('{cat_name_escaped}' AS name, {cat_item.get('relevancy_score', 0.0)} AS relevancy)")
         category_bq_string = f"[{', '.join(category_bq_format)}]" if category_bq_format else "[]"
 
+        # Prepare sub_category list, ensuring nested names are escaped
+        sub_category_list = []
+        for problem_cat in category_list: # Iterate through problem_cat to get subcategories
+            if 'subcategory' in problem_cat and problem_cat['subcategory']:
+                sub_category_list.extend(problem_cat['subcategory'])
+
         sub_category_bq_format = []
-        for sub_cat in sub_category_list:
-            sub_category_bq_format.append(f"STRUCT('{sub_cat.get('category')}' AS name, {sub_cat.get('relevancy_score')} AS relevancy)")
+        for sub_cat_item in sub_category_list:
+            sub_cat_name = sub_cat_item.get('category')
+            if sub_cat_name is None:
+                continue
+            # Correctly escape and assign back
+            sub_cat_name_escaped = sub_cat_name.replace("'", "\\'")
+            sub_category_bq_format.append(f"STRUCT('{sub_cat_name_escaped}' AS name, {sub_cat_item.get('relevancy_score', 0.0)} AS relevancy)")
         sub_category_bq_string = f"[{', '.join(sub_category_bq_format)}]" if sub_category_bq_format else "[]"
 
-        # Source and AI analysis are not present in the given dictionary, so setting them as None or empty string
-        extracted_data['source'] = None # Or an empty string: ''
-        extracted_data['ai_analysis'] = data['summary'] # The 'summary' field can be considered as AI analysis or a description
+        # Source: Your SQL uses 'google_news' literal. If 'extracted_data['source']' was used:
+        # source_for_sql = extracted_data.get('source', '').replace("'", "\\'") # Example if dynamic
 
-        # Extract department
-        # Assuming we want a list of departments
+        # AI analysis (summary): Correctly escape and assign
+        ai_analysis_for_sql = data.get('summary', '').replace("'", "\\'")
+
+        # Prepare department list, ensuring nested names are escaped
         department_bq_format = []
-        for dept in data['department']:
-            department_bq_format.append(f"STRUCT('{dept.get('department')}' AS name, {dept.get('relevancy_score')} AS relevancy)")
+        for dept_item in data.get('department', []): # Use .get() for safety
+            dept_name = dept_item.get('department')
+            if dept_name is None:
+                continue
+            # Correctly escape and assign back
+            dept_name_escaped = dept_name.replace("'", "\\'")
+            department_bq_format.append(f"STRUCT('{dept_name_escaped}' AS name, {dept_item.get('relevancy_score', 0.0)} AS relevancy)")
         department_bq_string = f"[{', '.join(department_bq_format)}]" if department_bq_format else "[]"
-        extracted_data['department'] = department_bq_string
 
-        # Severity is not directly provided as a single field.
-        # We can infer it from relevancy scores of problems, or if there's a specific 'severity' field.
-        # For now, let's derive a simple severity based on the highest relevancy score in problems.
-        # This is an example of how you might infer it. You might need a more sophisticated logic.
+        # --- FIXES TO STRING ESCAPING END HERE ---
+
+
+        # Severity logic (unchanged)
         max_problem_relevancy = 0
-        for problem_cat in data['problem']:
-            max_problem_relevancy = max(max_problem_relevancy, problem_cat['relevancy_score'])
-            for sub_cat in problem_cat['subcategory']:
-                max_problem_relevancy = max(max_problem_relevancy, sub_cat['relevancy_score'])
+        for problem_cat in data.get('problem', []):
+            max_problem_relevancy = max(max_problem_relevancy, problem_cat.get('relevancy_score', 0.0))
+            if 'subcategory' in problem_cat:
+                for sub_cat_item in problem_cat.get('subcategory', []):
+                    max_problem_relevancy = max(max_problem_relevancy, sub_cat_item.get('relevancy_score', 0.0))
 
-
-        # The 'id' field is not present in the provided dictionary. You would typically generate this
-        # when storing the data, e.g., using a UUID or an auto-incrementing ID from a database.
-        extracted_data['id'] = str(uuid.uuid4())
-        extracted_data['record_time'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f UTC')[:-3] + ' UTC'
-
-
-        event_timestamp_iso = datetime.now().isoformat()
+        record_id = str(uuid.uuid4())
+        record_time_iso = datetime.utcnow().isoformat(timespec='microseconds')
         severity = 'P3'
 
-        print(extracted_data)
-
+        print(f"Generated Record ID: {record_id}")
+        # Removed print(extracted_data) as it might contain unescaped versions
+        # and cause confusion if debugging SQL errors.
 
         sql_insert_statement = f"""
         INSERT INTO {table_id} (
@@ -104,16 +115,16 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
             severity
         )
         VALUES (
-            '{extracted_data.get('id')}',
-            TIMESTAMP'{event_timestamp_iso}',
-            0.0,
-            0.0,
-            '{extracted_data.get('location')}',
-            '{extracted_data.get('sub_location')}',
+            '{record_id}',
+            TIMESTAMP'{record_time_iso}',
+            {latitude_for_sql},
+            {longitude_for_sql},
+            '{location_for_sql}',     -- Use the correctly escaped string
+            '{sub_location_for_sql}', -- Use the correctly escaped string
             {category_bq_string},
             {sub_category_bq_string},
             'google_news',
-            '{extracted_data.get('ai_analysis')}',
+            '{ai_analysis_for_sql}',  -- Use the correctly escaped string
             {department_bq_string},
             '{severity}'
         );
