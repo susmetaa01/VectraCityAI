@@ -1,5 +1,6 @@
 # src/model/incoming_events.py (or src/schemas.py)
 import logging
+from types import NoneType
 from typing import Optional, List
 
 from pydantic import BaseModel, Field, model_validator  # Ensure Field is imported if used elsewhere
@@ -26,6 +27,9 @@ class Geolocation(BaseModel):
     def populate_location_info(self):
         """Automatically populate area, sublocation, and address using reverse geocoding."""
         # Only perform reverse geocoding if the location fields are not already populated
+        if self.area is None and self.latitude is NoneType and self.longitude is NoneType:
+            logging.error("Area and geo coordinates are None")
+            return self
         if self.area is None or self.sublocation is None or self.address is None:
             try:
                 logger.info(f'Performing reverse geocoding for latitude={self.latitude}, longitude={self.longitude}')

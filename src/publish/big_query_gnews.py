@@ -1,6 +1,7 @@
 import json
 
 from google.cloud import bigquery
+import dateutil.parser
 import logging
 import apache_beam as beam
 from datetime import datetime
@@ -19,32 +20,23 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
         print(f"XXX: {type(element)}")
         print(f"XXX YYY ZZZ: {json.dumps(element)}")
 
-        xxx = json.dumps(element)
+        data = element
 
 
-        record_id = str(uuid.uuid4())
-        # Use the published_date from the AI analysis if available, otherwise current UTC
-        record_time = parsed_data.get('published_date') or datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f UTC')[:-3] + ' UTC'
+        extracted_data = {}
 
-        event_timestamp_iso = None
-        if record_time:
-            try:
-                event_timestamp_iso = dateutil.parser.parse(record_time).isoformat()
-            except Exception:
-                logging.warning(f"Could not parse timestamp '{record_time}'. Falling back to now.")
-                event_timestamp_iso = datetime.utcnow().isoformat()
+        extracted_data['latitude'] = data['location']['latitude']
+        extracted_data['longitude'] = data['location']['longitude']
 
-        latitude = parsed_data.get('location', {}).get('latitude')
-        longitude = parsed_data.get('location', {}).get('longitude')
-        location = parsed_data.get('location', {}).get('area')
-        sub_location = parsed_data.get('location', {}).get('sublocation')
+        # Extract location and sub_location
+        extracted_data['location'] = data['location']['area']
+        extracted_data['sub_location'] = data['location']['sublocation']
 
-        category_list = parsed_data.get('problem', [])
+        category_list = data['problem']
         sub_category_list = []
         for problem_cat in category_list:
             if 'subcategory' in problem_cat:
                 sub_category_list.extend(problem_cat['subcategory'])
-
         category_bq_format = []
         for cat in category_list:
             category_bq_format.append(f"STRUCT('{cat.get('category')}' AS name, {cat.get('relevancy_score')} AS relevancy)")
@@ -55,16 +47,39 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
             sub_category_bq_format.append(f"STRUCT('{sub_cat.get('category')}' AS name, {sub_cat.get('relevancy_score')} AS relevancy)")
         sub_category_bq_string = f"[{', '.join(sub_category_bq_format)}]" if sub_category_bq_format else "[]"
 
-        source = parsed_data.get('source', 'Unknown') # Get source from parsed data, or default
-        ai_analysis_summary = parsed_data.get('summary', '')
+        # Source and AI analysis are not present in the given dictionary, so setting them as None or empty string
+        extracted_data['source'] = None # Or an empty string: ''
+        extracted_data['ai_analysis'] = data['summary'] # The 'summary' field can be considered as AI analysis or a description
 
-        department_list = parsed_data.get('department', [])
+        # Extract department
+        # Assuming we want a list of departments
         department_bq_format = []
-        for dept in department_list:
+        for dept in data['department']:
             department_bq_format.append(f"STRUCT('{dept.get('department')}' AS name, {dept.get('relevancy_score')} AS relevancy)")
         department_bq_string = f"[{', '.join(department_bq_format)}]" if department_bq_format else "[]"
+        extracted_data['department'] = department_bq_string
 
-        severity = parsed_data.get('severity', 'P3')
+        # Severity is not directly provided as a single field.
+        # We can infer it from relevancy scores of problems, or if there's a specific 'severity' field.
+        # For now, let's derive a simple severity based on the highest relevancy score in problems.
+        # This is an example of how you might infer it. You might need a more sophisticated logic.
+        max_problem_relevancy = 0
+        for problem_cat in data['problem']:
+            max_problem_relevancy = max(max_problem_relevancy, problem_cat['relevancy_score'])
+            for sub_cat in problem_cat['subcategory']:
+                max_problem_relevancy = max(max_problem_relevancy, sub_cat['relevancy_score'])
+
+
+        # The 'id' field is not present in the provided dictionary. You would typically generate this
+        # when storing the data, e.g., using a UUID or an auto-incrementing ID from a database.
+        extracted_data['id'] = str(uuid.uuid4())
+        extracted_data['record_time'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f UTC')[:-3] + ' UTC'
+
+
+        event_timestamp_iso = datetime.now().isoformat()
+
+        print(extracted_data)
+
 
         sql_insert_statement = f"""
         INSERT INTO {table_id} (
@@ -82,18 +97,18 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
             severity
         )
         VALUES (
-            '{record_id}',
-            TIMESTAMP'{event_timestamp_iso}',
-            {latitude if latitude is not None else 'NULL'},
-            {longitude if longitude is not None else 'NULL'},
-            '{location}',
-            '{sub_location}',
+            '{extracted_data.get('record_id')}',
+            TIMESTAMP'{event_timestamp_iso},
+            'NULL',
+            'NULL',
+            '{extracted_data.get('location')}',
+            '{extracted_data.get('sub_location')}',
             {category_bq_string},
             {sub_category_bq_string},
-            '{source}',
-            '{ai_analysis_summary}',
+            '{extracted_data.get('source')}',
+            '{extracted_data.get('ai_analysis_summary')}',
             {department_bq_string},
-            '{severity}'
+            'P3'
         );
         """
 

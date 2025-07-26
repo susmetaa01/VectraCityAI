@@ -7,6 +7,7 @@ from apache_beam.options.pipeline_options import PipelineOptions, StandardOption
     GoogleCloudOptions
 
 from src.parse.parse_gnews import ExtractNewsMetadataTransform
+from src.publish.big_query_gnews import BigQuerySqlInsertFnGnews
 # Import necessary BigQuery components for general BigQueryIO usage if needed elsewhere,
 # but for SQL inserts, BigQueryDisposition is sufficient for create_disposition.
 # from apache_beam.io.gcp.bigquery import BigQueryDisposition, WriteDisposition, BigQueryIO
@@ -75,7 +76,7 @@ def run_pipeline():
                 | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
                 | 'DecodeAndParseNewsJson' >> beam.Map(
             lambda element: json.loads(element.decode('utf-8')))
-                | 'WriteGnewsAnalyzedToBigQuerySql' >> beam.ParDo(BigQuerySqlInsertFn()
+                | 'WriteGnewsAnalyzedToBigQuerySql' >> beam.ParDo(BigQuerySqlInsertFnGnews()
                                                                      )
         )
 
