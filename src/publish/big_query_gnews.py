@@ -28,9 +28,15 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
         extracted_data['latitude'] = data['location']['latitude']
         extracted_data['longitude'] = data['location']['longitude']
 
-        # Extract location and sub_location
-        extracted_data['location'] = data['location']['area']
-        extracted_data['sub_location'] = data['location']['sublocation']
+        try:
+            extracted_data['location'] = data['location']['area']
+        except KeyError:
+            extracted_data['location'] = None
+        try:
+            extracted_data['sub_location'] = data['location']['sublocation']
+        except KeyError:
+            extracted_data['sub_location'] = None
+
 
         category_list = data['problem']
         sub_category_list = []
@@ -98,7 +104,7 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
             severity
         )
         VALUES (
-            '{extracted_data.get('record_id')}',
+            '{extracted_data.get('id')}',
             TIMESTAMP'{event_timestamp_iso}',
             0.0,
             0.0,
@@ -106,8 +112,8 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
             '{extracted_data.get('sub_location')}',
             {category_bq_string},
             {sub_category_bq_string},
-            '{extracted_data.get('source')}',
-            '{extracted_data.get('ai_analysis_summary')}',
+            'google_news',
+            '{extracted_data.get('ai_analysis')}',
             {department_bq_string},
             '{severity}'
         );
