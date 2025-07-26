@@ -147,7 +147,8 @@ def _normalize_event_fields(event_data: Dict[str, Any], source_type: str) -> Dic
         "information": information_text,
         "geolocation": geolocation_obj.model_dump(), # Convert Pydantic model to dict
         "timestamp": event_timestamp_str,
-        "optional_information": "\n".join(optional_info_parts) if optional_info_parts else None
+        "optional_information": "\n".join(optional_info_parts) if optional_info_parts else None,
+        "source": source_type
     }
 
     logger.info(f"--- Finished Normalization for {source_type} ---")
