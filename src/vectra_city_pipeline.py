@@ -1,6 +1,6 @@
 import json
-import logging # Keep logging import if you use it directly here
-from datetime import datetime # Keep datetime if used elsewhere
+import logging  # Keep logging import if you use it directly here
+from datetime import datetime  # Keep datetime if used elsewhere
 
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, \
@@ -11,7 +11,7 @@ from apache_beam.options.pipeline_options import PipelineOptions, StandardOption
 # from apache_beam.io.gcp.bigquery import BigQueryDisposition, WriteDisposition, BigQueryIO
 
 # Import the new BigQuerySqlInsertFn from your custom module
-from .publish.big_query import BigQuerySqlInsertFn # <--- NEW IMPORT
+from .publish.big_query import BigQuerySqlInsertFn  # <--- NEW IMPORT
 
 import os
 from dotenv import load_dotenv
@@ -69,8 +69,10 @@ def run_pipeline():
             analyze.gemini_analyzer.AIComprehensionFn())
                 # --- NEW: Write to BigQuery using SQL INSERT in ParDo ---
                 | 'WriteWhatsAppAnalyzedToBigQuerySql' >> beam.ParDo(BigQuerySqlInsertFn()
+                                                                     )
         )
-        )
+
+        # BigQuerySqlInsertFn.xx(None)
 
         # --- Branch 2: Raw Twitter Feed ---
         # Raw data -> Parsing -> Normalization -> AI Analysis
@@ -122,7 +124,8 @@ def run_pipeline():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO) # Ensure logging is configured for main execution as well
+    logging.basicConfig(
+        level=logging.INFO)  # Ensure logging is configured for main execution as well
     _LOGGER.info("Starting Apache Beam pipeline")
 
     # --- IMPORTANT: Set these environment variables in your terminal BEFORE running this script ---
@@ -151,4 +154,5 @@ if __name__ == '__main__':
     #      --max_num_workers=2 # Adjust worker count as needed
 
     run_pipeline()
-    _LOGGER.info("Apache Beam pipeline finished its setup. It will continue running for streaming data.")
+    _LOGGER.info(
+        "Apache Beam pipeline finished its setup. It will continue running for streaming data.")
