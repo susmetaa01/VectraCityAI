@@ -1,10 +1,19 @@
 import json
 
 import apache_beam as beam
+from apache_beam.io.gcp.bigquery import BigQueryDisposition
+#beam.io.gcp.bigquery.WriteToBigQuery
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, GoogleCloudOptions
+
+from apache_beam.io.gcp.bigquery import ReadFromBigQuery
 import os
 
 from dotenv import load_dotenv
+
+# Import BigQuery specific options
+# Ensure your Apache Beam version is 2.30.0 or higher for these imports to work directly.
+# If not, you might need to upgrade Beam or import from bigquery_tools (less recommended).
+# from apache_beam.io.gcp.bigquery_tools import BigQueryDisposition, WriteDisposition
 
 # Relative imports from your newly created 'src' package
 from . import config
@@ -21,7 +30,7 @@ def run_pipeline():
     """
     Main function to define and run the Apache Beam pipeline.
     This pipeline reads from WhatsApp trigger events and raw Twitter feeds,
-    and prints the parsed payloads.
+    and writes analyzed WhatsApp events to BigQuery.
     """
     pipeline_options = PipelineOptions()
     load_dotenv()
@@ -33,6 +42,35 @@ def run_pipeline():
     pipeline_options.view_as(GoogleCloudOptions).temp_location = config.GCS_TEMP_LOCATION
     pipeline_options.view_as(GoogleCloudOptions).staging_location = config.GCS_STAGING_LOCATION
     pipeline_options.view_as(StandardOptions).streaming = True # Essential for Pub/Sub sources
+
+    # Define the BigQuery table name
+    # Format: project_id:dataset_id.table_id
+    bigquery_table = f"{config.GCP_PROJECT_ID}:{config.BIGQUERY_DATASET_ID}.{config.BIGQUERY_TABLE_ID}"
+    bigquery_schema =  {
+        'fields':[
+            {'name':'id', 'type':'STRING', 'mode':'REQUIRED'},
+            {'name':'record_time', 'type':'TIMESTAMP', 'mode':'REQUIRED'},
+            {'name':'geography', 'type':'GEOGRAPHY', 'mode':'REQUIRED'},
+            {'name':'location', 'type':'STRING', 'mode':'REQUIRED'},
+            {'name':'sub_location', 'type':'STRING', 'mode':'NULLABLE'},
+            {'name':'category', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
+                {'name':'name', 'type':'STRING', 'mode':'REQUIRED'},
+                {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'},
+            ]},
+            {'name':'name', 'type':'STRING', 'mode':'REQUIRED'},
+            {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'},
+            {'name':'sub_category', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
+                {'name':'name', 'type':'STRING', 'mode':'NULLABLE'},
+                {'name':'relevancy', 'type':'FLOAT', 'mode':'NULLABLE'},
+            ]},
+            {'name':'source', 'type':'STRING', 'mode':'REQUIRED'},
+            {'name':'ai_analysis', 'type':'STRING', 'mode':'REQUIRED'},
+            {'name':'department', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
+                {'name':'name', 'type':'STRING', 'mode':'REQUIRED'},
+                {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'},
+            ]},
+        ]
+    }
 
     with beam.Pipeline(options=pipeline_options) as pipeline:
         # --- Branch 1: Full WhatsApp Event Payloads ---
@@ -46,7 +84,17 @@ def run_pipeline():
                 | 'ComprehendWhatsAppEvent' >> beam.ParDo(parse.data_normaliser.ComprehendFn())
                 # | 'PrintWhatsAppComprehendedEvent' >> beam.Map(lambda x: print(f"Comprehended WhatsApp Event: {x}")) # Debug normalized
                 | 'AnalyzeWhatsAppEventsWithGemini' >> beam.ParDo(analyze.gemini_analyzer.AIComprehensionFn())
-                | 'PrintWhatsAppAnalyzedEvent' >> beam.Map(lambda x: print(f"Analyzed WhatsApp Event: {x}"))
+                # --- NEW: Write to BigQuery ---
+                | 'WriteWhatsAppAnalyzedToBigQuery' >> beam.io.WriteToBigQuery(
+            table=bigquery_table, # CORRECTED: Use the bigquery_table variable
+            schema=bigquery_schema, # Beam will try to infer the schema.
+            # For production, define an explicit schema for robustness.
+            create_disposition=BigQueryDisposition.CREATE_IF_NEEDED,
+            write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND, # Append to the table
+            # For streaming, STORAGE_WRITE_API is highly recommended for exactly-once semantics
+            method=beam.io.WriteToBigQuery.Method.STORAGE_WRITE_API,
+            with_auto_sharding=True # Recommended for better parallelism and throughput
+        )
         )
 
         # --- Branch 2: Raw Twitter Feed ---
@@ -62,8 +110,7 @@ def run_pipeline():
                 | 'PrintTwitterAnalyzedEvent' >> beam.Map(lambda x: print(f"Analyzed Twitter Event: {x}"))
         )
 
-        # --- Branch 3: Raw Google News Feed ---
-        # Raw data -> Decoding/Parsing -> Normalization -> AI Analysis
+        # --- Branch 3: Raw Google News Feed (commented out) ---
         # google_news_pipeline = (
         #         pipeline
         #         | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
@@ -103,15 +150,17 @@ if __name__ == '__main__':
     # export PUBSUB_SUBSCRIPTION_NAME_TRIGGER='vectraCityAI-event-trigger-sub'
     # export PUBSUB_SUBSCRIPTION_NAME_TWITTER='raw-twitter-feed-sub' # Create this topic/subscription!
     # export GCS_DATAFLOW_BUCKET='schrodingers-cat-466413-dataflow-temp' # Ensure this GCS bucket exists!
+    # export BIGQUERY_DATASET_ID='your_bigquery_dataset' # Already set in config.py to 'vectraCityRaw'
+    # export BIGQUERY_TABLE_ID='whatsapp_analyzed_events' # Already set in config.py
 
     print("Starting Apache Beam pipeline")
 
     # --- How to Run ---
     # 1. Local (for testing, uses DirectRunner):
-    #    python -m src.main_pipeline --runner=DirectRunner --streaming
+    #    python -m src.vectra_city_pipeline --runner=DirectRunner --streaming
     #
     # 2. Deploy to Google Cloud Dataflow (for production):
-    #    python -m src.main_pipeline \
+    #    python -m src.vectra_city_pipeline \
     #      --runner=DataflowRunner \
     #      --project=$GCP_PROJECT_ID \
     #      --region=$DATAFLOW_REGION \
