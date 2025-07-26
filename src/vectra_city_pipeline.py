@@ -70,6 +70,15 @@ def run_pipeline():
                                                                      )
         )
 
+        google_news_pipeline = (
+                pipeline
+                | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
+                | 'DecodeAndParseNewsJson' >> beam.Map(
+            lambda element: json.loads(element.decode('utf-8')))
+                | 'WriteGnewsAnalyzedToBigQuerySql' >> beam.ParDo(BigQuerySqlInsertFn()
+                                                                     )
+        )
+
         # --- Branch 2: Raw Twitter Feed ---
         # Raw data -> Parsing -> Normalization -> AI Analysis
         twitter_pipeline = (
@@ -88,18 +97,6 @@ def run_pipeline():
 
         # --- Branch 3: Raw Google News Feed ---
         # Raw data -> Decoding/Parsing -> Normalization -> AI Analysis
-        google_news_pipeline = (
-                pipeline
-                | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
-                | 'DecodeAndParseNewsJson' >> beam.Map(
-            lambda element: json.loads(element.decode('utf-8')))
-                | 'ExtractNewsMetadata' >> ExtractNewsMetadataTransform()
-                | 'PrintExtractedMetadata' >> beam.Map(lambda x: print(f"Extracted News Metadata: {x}"))
-        # Debug parsed
-            # | 'ComprehendNewsArticle' >> beam.ParDo(data_normaliser.ComprehendFn())
-            # | 'AnalyzeNewsArticlesWithGemini' >> beam.ParDo(gemini_analyzer.AIComprehensionFn())
-            # | 'PrintAnalyzedNewsArticle' >> beam.Map(lambda x: print(f"Analyzed News Article: {x}"))
-        )
 
 
         # --- Trigger Event Listener (Separate Branch, No AI Analysis on triggers) ---

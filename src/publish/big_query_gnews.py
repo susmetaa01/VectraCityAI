@@ -1,3 +1,5 @@
+import json
+
 from google.cloud import bigquery
 import logging
 import apache_beam as beam
@@ -11,20 +13,14 @@ client = bigquery.Client()
 # Define your table ID
 table_id = "schrodingers-cat-466413.vectraCityRaw.LivePulse"
 
-class BigQuerySqlInsertFn(beam.DoFn):
+class BigQuerySqlInsertFnGnews(beam.DoFn):
     def process(self, element):
         print(f"ELEMENT REACHED PUBLISH: {element}")
+        print(f"XXX: {type(element)}")
+        print(f"XXX YYY ZZZ: {json.dumps(element)}")
 
-        # This BigQuerySqlInsertFn expects an element that has already undergone AI analysis
-        # and has a 'parsed' attribute (e.g., a google.generativeai.types.GenerateContentResponse).
-        # For a Google News RSS payload, you'd call process_google_news_rss *before* this DoFn,
-        # or have a separate pipeline branch for it.
-        if not hasattr(element, 'parsed') or element.parsed is None:
-            logging.error(f"Element received does not have a 'parsed' attribute or it is None: {element}")
-            # Decide how to handle this: skip, raise error, or log to a dead-letter queue.
-            raise ValueError("Invalid element received: 'parsed' attribute missing or None. This DoFn expects pre-analyzed data.")
+        xxx = json.dumps(element)
 
-        parsed_data = element.parsed.model_dump()
 
         record_id = str(uuid.uuid4())
         # Use the published_date from the AI analysis if available, otherwise current UTC

@@ -40,7 +40,7 @@ current_time = datetime.now()
 
 area = ["bangalore"]
 news_tags = ["traffic, floods, power cut, bbmp, municipality, drainage, protests, accidents, rallies, events"]
-news_timedelta_days = 60
+news_timedelta_days = 80
 client = genai.Client()
 
 
@@ -111,9 +111,10 @@ def fetch_and_publish_feed():
             pass
         for res in responses:
             # Publish to Pub/Sub
+            print(f"RES: {res}")
             json_payload = res.model_dump_json(exclude_none=True)
             future = publisher.publish(PUBSUB_TOPIC_PATH, json_payload.encode('utf-8'))
-            print(f"Published {future} new articles.")
+            print(f"Published {json_payload} new articles.")
     except Exception as e:
         print(f"Error fetching or processing feed {current_time}: {e}")
 
