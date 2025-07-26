@@ -1,0 +1,25 @@
+ {
+        'fields':[
+        {'name':'id', 'type':'STRING', 'mode':'REQUIRED'},
+    {'name':'record_time', 'type':'TIMESTAMP', 'mode':'REQUIRED'},
+    {'name':'geography', 'type':'GEOGRAPHY', 'mode':'REQUIRED'},
+    {'name':'location', 'type':'STRING', 'mode':'REQUIRED'},
+    {'name':'sub_location', 'type':'STRING', 'mode':'NULLABLE'},
+    {'name':'category', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
+        {'name':'name', 'type':'STRING', 'mode':'REQUIRED'},
+    {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'},
+    ]},
+    {'name':'name', 'type':'STRING', 'mode':'REQUIRED'} # Assuming this is a top-level 'name'
+    {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'} # Assuming this is a top-level 'relevancy'
+    {'name':'sub_category', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
+        {'name':'name', 'type':'STRING', 'mode':'NULLABLE'},
+    {'name':'relevancy', 'type':'FLOAT', 'mode':'NULLABLE'},
+    ]},
+    {'name':'source', 'type':'STRING', 'mode':'REQUIRED'},
+    {'name':'ai_analysis', 'type':'STRING', 'mode':'REQUIRED'},
+    {'name':'department', 'type':'RECORD', 'mode':'REPEATED', 'fields':[
+        {'name':'name', 'type':'STRING', 'mode':'REQUIRED'},
+    {'name':'relevancy', 'type':'FLOAT', 'mode':'REQUIRED'},
+    ]},
+    ]
+    }
