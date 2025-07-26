@@ -100,15 +100,15 @@ class BigQuerySqlInsertFnGnews(beam.DoFn):
         VALUES (
             '{extracted_data.get('record_id')}',
             TIMESTAMP'{event_timestamp_iso}',
-            'NULL',
-            'NULL',
+            0.0,
+            0.0,
             '{extracted_data.get('location')}',
             '{extracted_data.get('sub_location')}',
             {category_bq_string},
             {sub_category_bq_string},
             '{extracted_data.get('source')}',
             '{extracted_data.get('ai_analysis_summary')}',
-            '{department_bq_string}',
+            {department_bq_string},
             '{severity}'
         );
         """
