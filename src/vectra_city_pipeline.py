@@ -6,6 +6,7 @@ import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, \
     GoogleCloudOptions
 
+from src.parse.parse_gnews import ExtractNewsMetadataTransform
 # Import necessary BigQuery components for general BigQueryIO usage if needed elsewhere,
 # but for SQL inserts, BigQueryDisposition is sufficient for create_disposition.
 # from apache_beam.io.gcp.bigquery import BigQueryDisposition, WriteDisposition, BigQueryIO
@@ -92,14 +93,14 @@ def run_pipeline():
                 | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
                 | 'DecodeAndParseNewsJson' >> beam.Map(
             lambda element: json.loads(element.decode('utf-8')))
-                | 'PrintParsedNewsArticle' >> beam.Map(lambda x: print(f"Parsed News Article: {x}"))
-                | 'WriteGnewsAnalyzedToBigQuerySql' >> beam.ParDo(BigQuerySqlInsertFn()
-                                                                     )
+                | 'ExtractNewsMetadata' >> ExtractNewsMetadataTransform()
+                | 'PrintExtractedMetadata' >> beam.Map(lambda x: print(f"Extracted News Metadata: {x}"))
         # Debug parsed
             # | 'ComprehendNewsArticle' >> beam.ParDo(data_normaliser.ComprehendFn())
             # | 'AnalyzeNewsArticlesWithGemini' >> beam.ParDo(gemini_analyzer.AIComprehensionFn())
             # | 'PrintAnalyzedNewsArticle' >> beam.Map(lambda x: print(f"Analyzed News Article: {x}"))
         )
+
 
         # --- Trigger Event Listener (Separate Branch, No AI Analysis on triggers) ---
         # This branch reads only the SIDs of WhatsApp events that have been fully processed.

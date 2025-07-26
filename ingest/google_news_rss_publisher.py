@@ -40,7 +40,7 @@ current_time = datetime.now()
 
 area = ["bangalore"]
 news_tags = ["traffic, floods, power cut, bbmp, municipality, drainage, protests, accidents, rallies, events"]
-news_timedelta_days = 40
+news_timedelta_days = 60
 client = genai.Client()
 
 
