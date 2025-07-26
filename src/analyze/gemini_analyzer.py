@@ -1,25 +1,14 @@
-import apache_beam as beam
-import logging
-from datetime import datetime
-from typing import Dict, Any, Optional
-
 import json
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Dict, Any
 
+import apache_beam as beam
 import httpx
-import requests
-from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from ..model.incoming_events import Geolocation, AnalysisResponse, DataInput
-
-
-from ..model.incoming_events import Geolocation # For constructing Pydantic models
-import dateutil.parser # For robust date parsing
-
+from ..model.incoming_events import AnalysisResponse, DataInput
 from ..utils.gcs_utils import fetch_gcs_content_as_bytes
 
 # load_dotenv()
@@ -46,9 +35,9 @@ class AIComprehensionFn(beam.DoFn):
 
         # Prepare the payload for Gemini
         if element is not None:
-            print(f"KHIKHIKHIKHI {element}")
+            print(f"{element}")
         else:
-            print("Element is None")
+            raise ValueError("Null input for AI comprehension")
         data_input_object = element.get('data')
         data_input = DataInput(**data_input_object) if data_input_object else None
         print(data_input, type(data_input))

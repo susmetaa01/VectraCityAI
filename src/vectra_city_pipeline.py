@@ -6,6 +6,8 @@ import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, \
     GoogleCloudOptions
 
+from src.parse.parse_gnews import ExtractNewsMetadataTransform
+from src.publish.big_query_gnews import BigQuerySqlInsertFnGnews
 # Import necessary BigQuery components for general BigQueryIO usage if needed elsewhere,
 # but for SQL inserts, BigQueryDisposition is sufficient for create_disposition.
 # from apache_beam.io.gcp.bigquery import BigQueryDisposition, WriteDisposition, BigQueryIO
@@ -69,7 +71,14 @@ def run_pipeline():
                                                                      )
         )
 
-        # BigQuerySqlInsertFn.xx(None)
+        google_news_pipeline = (
+                pipeline
+                | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
+                | 'DecodeAndParseNewsJson' >> beam.Map(
+            lambda element: json.loads(element.decode('utf-8')))
+                | 'WriteGnewsAnalyzedToBigQuerySql' >> beam.ParDo(BigQuerySqlInsertFnGnews()
+                                                                     )
+        )
 
         # --- Branch 2: Raw Twitter Feed ---
         # Raw data -> Parsing -> Normalization -> AI Analysis
@@ -87,17 +96,9 @@ def run_pipeline():
             lambda x: print(f"Analyzed Twitter Event: {x}"))
         )
 
-        # --- Branch 3: Raw Google News Feed (commented out) ---
-        # google_news_pipeline = (
-        #         pipeline
-        #         | 'ReadRawGoogleNewsFeed' >> io_connectors.ReadGoogleNewsFeed()
-        #         | 'DecodeAndParseNewsJson' >> beam.Map(lambda element: json.loads(element.decode('utf-8')))
-        #         # | 'PrintParsedNewsArticle' >> beam.Map(lambda x: print(f"Parsed News Article: {x}")) # Debug parsed
-        #         | 'ComprehendNewsArticle' >> beam.ParDo(data_normaliser.ComprehendFn())
-        #         | 'PrintComprehendedNewsArticle' >> beam.Map(lambda x: print(f"Comprehended News Article: {x}")) # Debug normalized
-        #         | 'AnalyzeNewsArticlesWithGemini' >> beam.ParDo(gemini_analyzer.AIComprehensionFn())
-        #         | 'PrintAnalyzedNewsArticle' >> beam.Map(lambda x: print(f"Analyzed News Article: {x}"))
-        # )
+        # --- Branch 3: Raw Google News Feed ---
+        # Raw data -> Decoding/Parsing -> Normalization -> AI Analysis
+
 
         # --- Trigger Event Listener (Separate Branch, No AI Analysis on triggers) ---
         # This branch reads only the SIDs of WhatsApp events that have been fully processed.
