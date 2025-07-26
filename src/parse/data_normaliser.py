@@ -175,22 +175,5 @@ class ComprehendFn(beam.DoFn):
             source_type = "googlenews"
 
         normalized_event = _normalize_event_fields(element, source_type)
-        print("NORMALISED EVENT: {}",normalized_event)
+        print(f"NORMALISED EVENT: {normalized_event}")
         yield normalized_event
-
-        # try: # <-- NEW: Added try-except block for robust processing
-        #     normalized_event = _normalize_event_fields(element, source_type)
-        #     print("TYPE: {}",type(normalized_event))
-        #     yield normalized_event
-        # except Exception as e:
-        #     # Catch any error during normalization, log it, and discard the element
-        #     error_info = {
-        #         "error_stage": "ComprehendFn_normalization",
-        #         "error_message": str(e),
-        #         "original_element_raw": json.dumps(element, indent=2), # Store the original element that caused error
-        #         "source_type": source_type,
-        #         "timestamp_utc": datetime.now().isoformat()
-        #     }
-        #     logger.error(f"Error in ComprehendFn for element from {source_type}: {e}\nOriginal Element: {json.dumps(element, indent=2)}", exc_info=True)
-        #     # Do NOT yield, effectively dropping the malformed element from the pipeline.
-        #     # In a production setting, you might yield error_info to a dead-letter queue.

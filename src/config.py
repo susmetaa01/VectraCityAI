@@ -29,3 +29,6 @@ INFLUXDB_BUCKET = os.getenv("INFLUXDB_BUCKET", "your-bucket")
 # Example for Google Maps API key (if you'll use it for geocoding, etc.)
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyAJ7r-hVzCqkQ9mPq_DHDVTiDSRUCcFK74")
 GEMINI_API_KEY= os.getenv("GEMINI_API_KEY","AIzaSyAoje8vVTrVcqLCwGtx9lVyNzMPXFRyYPw")
+
+BIGQUERY_DATASET_ID = "vectraCityRaw"
+BIGQUERY_TABLE_ID = "LivePulse"
