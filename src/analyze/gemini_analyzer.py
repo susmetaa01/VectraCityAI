@@ -16,6 +16,9 @@ from google.genai import types
 from ..model.incoming_events import AnalysisResponse, DataInput
 from ..utils.gcs_utils import fetch_gcs_content_as_bytes
 
+from .prompts import get_root_prompt
+from ..model.incoming_events import AnalysisResponse, DataInput
+
 # load_dotenv()
 
 client = genai.Client()
@@ -23,15 +26,8 @@ logger = logging.getLogger('uvicorn.error')
 
 model_name = 'gemini-2.5-flash-lite-preview-06-17'
 
-SYSTEM_PROMPT = (
-    "Your a urban intelligence analyser. You are responsible for analyzing images, text, video or audio along with geolocation information provided. Given the input do following.\n"
-    "1. Categorise the input data provided into one or more of the following categories. Also give relevancy score to it between 0 and 1. Dont categorise anything which is less than 0.5 relevancy.\n"
-    "- Road complaints\n- Power or electricity outage\n- Mob immobilisation\n- Heavy traffic congestion\n- Medical and medical requirements\n- Bomb threat\n"
-    "2. Generate 2-3 subcategory from the above categories and classify the input.\n"
-    "3. Classify to one or more of the following department with relevancy score. Dont classify if score below 0.75\n"
-    "- Municipality\n- Police\n- Ambulance\n- Traffic police\n- Fire station\n"
-    "Also provide summary of the input provided. Include information from image if given."
-)
+
+SYSTEM_PROMPT = get_root_prompt()
 
 class AIComprehensionFn(beam.DoFn):
     def process(self, element: Dict[str, Any]):

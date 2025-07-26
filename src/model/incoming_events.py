@@ -108,6 +108,8 @@ class AnalysisResponse(BaseModel):
     location: Geolocation
     problem: List[ProblemCategory]
     department: List[Department]
+    severity: str
+    sentiment: int
 
 
 class DataInput(BaseModel):

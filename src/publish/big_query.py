@@ -69,6 +69,7 @@ class BigQuerySqlInsertFn(beam.DoFn):
         department_bq_string = f"[{', '.join(department_bq_format)}]" if department_bq_format else "[]"
 
         severity = parsed_data.get('severity', 'P3')
+        sentiment = parsed_data.get('sentiment', 0)
 
         sql_insert_statement = f"""
         INSERT INTO {table_id} (
@@ -83,7 +84,8 @@ class BigQuerySqlInsertFn(beam.DoFn):
             source,
             ai_analysis,
             department,
-            severity
+            severity,
+            sentiment
         )
         VALUES (
             '{record_id}',
@@ -97,7 +99,8 @@ class BigQuerySqlInsertFn(beam.DoFn):
             '{source}',
             '{ai_analysis_summary}',
             {department_bq_string},
-            '{severity}'
+            '{severity}',
+            '{sentiment}'
         );
         """
 
