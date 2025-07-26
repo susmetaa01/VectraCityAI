@@ -9,7 +9,7 @@ from google import genai
 from google.cloud import pubsub_v1  # For publishing to Pub/Sub
 from google.genai import types
 
-from ingest.prompts import get_google_news_prompt, get_structured_news_prompt
+from ingest.gnews_prompts import get_google_news_prompt, get_structured_news_prompt
 from src.model.incoming_events import AnalysisResponse
 
 # --- Configuration ---
