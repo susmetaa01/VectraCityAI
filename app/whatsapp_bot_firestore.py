@@ -227,9 +227,7 @@ def handle_twilio_message():
 
                 print(
                     f"Location received for pending message {original_payload.get('message_sid')}. Publishing to main topic.")
-                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
                 print(f"original_payload: {original_payload}")
-                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
                 # Publish the full, enriched event to the main Pub/Sub topic
                 if publish_full_event_to_pubsub(original_payload):
                     # If full event published successfully, send trigger event and delete session
@@ -237,14 +235,14 @@ def handle_twilio_message():
                     delete_session_from_firestore(from_number)  # Clear session from Firestore
 
                 send_whatsapp_message(from_number,
-                                      "Thanks! We've received your location and are processing your report. Please allow a moment for analysis.")
+                                      "We've received your location and are processing your report. Thanks!")
 
             else:
                 # Location received, but original message timed out
                 print(
                     f"Location received for message {original_payload.get('message_sid')} but it already timed out.")
                 send_whatsapp_message(from_number,
-                                      "Thanks for your location. Your previous message timed out as location wasn't provided promptly, so it was discarded. Please send your report again with location if needed.")
+                                      "Thanks for your location. Your previous message timed out without. Please send your report again with location if needed.")
                 # Clear session from Firestore
                 delete_session_from_firestore(from_number)
                 # Option: Publish the *standalone* location as a separate event if you want to record it
@@ -294,7 +292,7 @@ def handle_twilio_message():
                 print(
                     f"User {from_number} sent new message while still waiting for location for previous. Reminding to send location first.")
                 send_whatsapp_message(from_number,
-                                      "Please provide your location for your *previous* message first. If you want to send a new report, please do so after sharing location for the current pending request, or after it times out.")
+                                      "Please provide your location for your *previous* message first")
                 return jsonify({'status': 'ok'}), 200  # Acknowledge and return early
 
         # Create a new payload for Pub/Sub (will be stored in Firestore, not published yet)
@@ -376,7 +374,7 @@ def handle_twilio_message():
         save_session_to_firestore(from_number, session_data_to_store)
 
         send_whatsapp_message(from_number,
-                              "Thanks for your report! To help us pinpoint the issue, please share your **current location** via WhatsApp's attachment icon (Location). You have 5 minutes to share it before this report is discarded.")
+                              "Thanks for your report! To pinpoint the issue, please share your current location via WhatsApp's attachment icon (Location) within 5 minutes, or this report will be discarded.")
 
     # --- Handle Unsupported Message Types ---
     else:
